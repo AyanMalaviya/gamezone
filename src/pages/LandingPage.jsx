@@ -96,7 +96,7 @@ const FEATURES = [
 const GAMES = [
   'God of War Ragnarök', 'Spider-Man 2', 'Elden Ring', 'Gran Turismo 7',
   'Call of Duty', 'FIFA 25', 'Mortal Kombat 1', 'Hogwarts Legacy',
-  'Returnal', 'Ratchet & Clank', 'Demon's Souls', 'Resident Evil 4',
+  'Returnal', 'Ratchet & Clank', "Demon's Souls", 'Resident Evil 4',
 ];
 
 export default function LandingPage() {
@@ -165,7 +165,7 @@ export default function LandingPage() {
         <div className="hero-content">
           <div className="hero-badge">
             <span className="hero-badge-dot" />
-            Now open in Surat
+            Now open in Juhapura, Ahmedabad
           </div>
 
           <h1 className="hero-heading">
