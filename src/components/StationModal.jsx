@@ -1,67 +1,115 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { X } from 'lucide-react';
+import { X, Clock, Gamepad2, Steering, CheckCircle2, XCircle } from 'lucide-react';
+
+const SlotItem = ({ slot }) => (
+  <li className="flex items-center gap-3 rounded-lg border border-white/5 bg-white/[0.03] px-4 py-2.5">
+    <Clock size={14} className="shrink-0 text-violet-400" />
+    <span className="text-sm font-medium text-white/80">{slot}</span>
+  </li>
+);
 
 const StationModal = ({ station, open, onClose }) => {
   if (!station) return null;
 
-  const { id, status, bookedSlots = [], preferredGame } = station;
-  const isAvailable = status.toLowerCase() === 'available';
+  const { id, status, bookedSlots = [], preferredGame, stationType } = station;
+  const isAvailable = status?.toLowerCase() === 'available';
+  const isRacing = stationType === 'Racing Simulator';
+
+  const slots = Array.isArray(bookedSlots)
+    ? bookedSlots
+    : typeof bookedSlots === 'string' && bookedSlots
+    ? bookedSlots.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
 
   return (
-    <Dialog.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <Dialog.Content className="fixed left-[50%] top-[50%] z-50 max-h-[85vh] w-full max-w-md translate-x-[-50%] translate-y-[-50%] overflow-y-auto rounded-xl border border-slate-800 bg-slate-950 p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]">
-          <div className="mb-6 flex items-center justify-between">
-            <Dialog.Title className="text-2xl font-bold text-white">
-              Station {id}
-            </Dialog.Title>
-            <Dialog.Close asChild>
-              <button
-                aria-label="Close"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-800 hover:text-white focus:outline-none"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </Dialog.Close>
-          </div>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
 
-          <div className="space-y-6">
-            {isAvailable ? (
-              <div className="rounded-lg border border-green-500/20 bg-green-500/10 p-4">
-                <p className="text-center font-medium text-green-400">Available</p>
-              </div>
-            ) : (
-              <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4">
-                <p className="text-center font-medium text-red-400">Occupied</p>
-              </div>
-            )}
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2
+            overflow-hidden rounded-2xl border border-white/8 bg-[#131318]
+            shadow-[0_32px_80px_rgba(0,0,0,0.7)]
+            data-[state=open]:animate-in data-[state=closed]:animate-out
+            data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
+            data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95
+            data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]
+            data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]"
+        >
+          {/* Coloured top strip */}
+          <div className={`h-1 w-full ${
+            isRacing ? 'bg-amber-500' : isAvailable ? 'bg-green-500' : 'bg-red-500'
+          }`} />
 
-            {preferredGame && (
+          <div className="max-h-[80dvh] overflow-y-auto p-6">
+            {/* Header */}
+            <div className="mb-6 flex items-start justify-between gap-4">
               <div>
-                <h3 className="mb-2 text-sm font-medium text-slate-400">Preferred Game</h3>
-                <p className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-white">
-                  {preferredGame}
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-white/30">
+                  {isRacing ? 'Racing Simulator' : 'PS5 Station'}
                 </p>
+                <Dialog.Title className="text-3xl font-black leading-none tracking-tight text-white">
+                  Station {String(id).padStart(2, '0')}
+                </Dialog.Title>
               </div>
-            )}
+              <Dialog.Close asChild>
+                <button
+                  aria-label="Close"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/8 text-white/40 transition-colors hover:border-white/15 hover:text-white"
+                >
+                  <X size={16} />
+                </button>
+              </Dialog.Close>
+            </div>
 
-            <div>
-              <h3 className="mb-2 text-sm font-medium text-slate-400">Booked Slots</h3>
-              {bookedSlots.length > 0 ? (
-                <ul className="space-y-2">
-                  {bookedSlots.map((slot, idx) => (
-                    <li
-                      key={idx}
-                      className="rounded-lg border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300"
-                    >
-                      {slot}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm italic text-slate-500">No booked slots.</p>
+            {/* Status banner */}
+            <div className={`mb-6 flex items-center gap-3 rounded-xl px-4 py-3 ${
+              isAvailable
+                ? 'border border-green-500/20 bg-green-500/8'
+                : 'border border-red-500/20 bg-red-500/8'
+            }`}>
+              {isAvailable
+                ? <CheckCircle2 size={18} className="text-green-400" />
+                : <XCircle size={18} className="text-red-400" />}
+              <span className={`text-sm font-semibold ${
+                isAvailable ? 'text-green-400' : 'text-red-400'
+              }`}>
+                {isAvailable ? 'Available — Ready to play' : 'Currently Occupied'}
+              </span>
+            </div>
+
+            <div className="space-y-5">
+              {/* Preferred game */}
+              {preferredGame && (
+                <div>
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-white/30">
+                    {isRacing ? <Steering size={12} /> : <Gamepad2 size={12} />}
+                    Preferred Game
+                  </p>
+                  <div className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                    <span className="text-sm font-semibold text-white">{preferredGame}</span>
+                  </div>
+                </div>
               )}
+
+              {/* Booked slots */}
+              <div>
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-white/30">
+                  <Clock size={12} />
+                  Booked Slots
+                </p>
+                {slots.length > 0 ? (
+                  <ul className="space-y-2">
+                    {slots.map((slot, idx) => (
+                      <SlotItem key={idx} slot={slot} />
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 text-sm italic text-white/25">
+                    No slots booked yet
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </Dialog.Content>
