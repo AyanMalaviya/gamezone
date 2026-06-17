@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -17,6 +22,6 @@ export const auth           = getAuth(app);
 export const db             = getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Re-export GoogleAuthProvider class so any file can import it
-// directly from this module without touching firebase/auth
-export { GoogleAuthProvider };
+// Re-export Firebase Auth functions so the whole app
+// only needs to import from this single module
+export { GoogleAuthProvider, signInWithPopup, signOut };

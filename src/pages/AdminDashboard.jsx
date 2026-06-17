@@ -3,7 +3,7 @@ import { LogOut, Save, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react'
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
-import { auth, GoogleAuthProvider, signInWithPopup, signOut } from '../lib/firebase';
+import { auth, googleProvider, signInWithPopup, signOut } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import PageLayout, { PageBody } from '../components/PageLayout';
 
@@ -45,19 +45,19 @@ const LoginPage = ({ onLogin }) => (
 // ── Editable table row ────────────────────────────────────────────────────────
 const AdminTableRow = ({ station, index }) => {
   const [form, setForm] = useState({
-    status: station.status || 'available',
-    currentGame: station.currentGame || '',
-    bookedSlots: Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : '',
+    status:        station.status        || 'available',
+    currentGame:   station.currentGame   || '',
+    bookedSlots:   Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : '',
     preferredGame: station.preferredGame || '',
   });
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved]   = useState(false);
+  const [saved,  setSaved]  = useState(false);
 
   useEffect(() => {
     setForm({
-      status: station.status || 'available',
-      currentGame: station.currentGame || '',
-      bookedSlots: Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : '',
+      status:        station.status        || 'available',
+      currentGame:   station.currentGame   || '',
+      bookedSlots:   Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : '',
       preferredGame: station.preferredGame || '',
     });
   }, [station]);
@@ -69,10 +69,10 @@ const AdminTableRow = ({ station, index }) => {
     setSaving(true);
     try {
       await updateStation(index, {
-        id: station.id,
-        status: form.status,
-        currentGame: form.currentGame,
-        bookedSlots: form.bookedSlots.split(',').map((s) => s.trim()).filter(Boolean),
+        id:            station.id,
+        status:        form.status,
+        currentGame:   form.currentGame,
+        bookedSlots:   form.bookedSlots.split(',').map((s) => s.trim()).filter(Boolean),
         preferredGame: form.preferredGame,
       });
       setSaved(true);
@@ -88,14 +88,11 @@ const AdminTableRow = ({ station, index }) => {
 
   return (
     <tr className="group border-b border-white/5 transition-colors hover:bg-white/[0.02]">
-      {/* ID */}
       <td className="px-4 py-3">
         <span className="text-sm font-black text-white">
           {String(station.id).padStart(2, '0')}
         </span>
       </td>
-
-      {/* Status */}
       <td className="px-4 py-3">
         <select
           name="status"
@@ -111,58 +108,38 @@ const AdminTableRow = ({ station, index }) => {
           <option value="occupied">Occupied</option>
         </select>
       </td>
-
-      {/* Current game */}
       <td className="px-4 py-3">
         <input
-          type="text"
-          name="currentGame"
-          value={form.currentGame}
-          onChange={handleChange}
-          placeholder="e.g. FIFA 25"
+          type="text" name="currentGame" value={form.currentGame}
+          onChange={handleChange} placeholder="e.g. FIFA 25"
           className="w-full min-w-[140px] rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder-white/20 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
         />
       </td>
-
-      {/* Booked slots */}
       <td className="px-4 py-3">
         <input
-          type="text"
-          name="bookedSlots"
-          value={form.bookedSlots}
-          onChange={handleChange}
-          placeholder="10:00-11:00, 13:00-14:00"
+          type="text" name="bookedSlots" value={form.bookedSlots}
+          onChange={handleChange} placeholder="10:00-11:00, 13:00-14:00"
           className="w-full min-w-[200px] rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder-white/20 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
         />
       </td>
-
-      {/* Preferred game */}
       <td className="px-4 py-3">
         <input
-          type="text"
-          name="preferredGame"
-          value={form.preferredGame}
-          onChange={handleChange}
-          placeholder="e.g. Call of Duty"
+          type="text" name="preferredGame" value={form.preferredGame}
+          onChange={handleChange} placeholder="e.g. Call of Duty"
           className="w-full min-w-[140px] rounded-lg border border-white/8 bg-white/[0.04] px-3 py-1.5 text-sm text-white placeholder-white/20 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
         />
       </td>
-
-      {/* Save */}
       <td className="px-4 py-3">
         <button
-          onClick={handleSave}
-          disabled={saving}
+          onClick={handleSave} disabled={saving}
           className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
             saved
               ? 'bg-green-500/20 text-green-400'
               : 'bg-violet-600/20 text-violet-400 hover:bg-violet-600/30'
           } disabled:opacity-50`}
         >
-          {saving
-            ? <Loader2 size={13} className="animate-spin" />
-            : <Save size={13} />}
-          {saving ? 'Saving…' : saved ? 'Saved!' : 'Save'}
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
         </button>
       </td>
     </tr>
@@ -179,13 +156,14 @@ const StatCard = ({ label, value, color }) => (
 
 // ── Main dashboard ────────────────────────────────────────────────────────────
 const AdminDashboard = () => {
-  const user      = useAuthStore((s) => s.user);
-  const setUser   = useAuthStore((s) => s.setUser);
+  const user    = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const { stations, isLoading, isError } = useStationData();
 
+  // Use the pre-instantiated googleProvider from firebase.js
   const handleLogin = async () => {
     try {
-      const result = await signInWithPopup(auth, GoogleAuthProvider);
+      const result = await signInWithPopup(auth, googleProvider);
       setUser(result.user);
     } catch {
       alert('Sign-in failed. Please try again.');
@@ -220,13 +198,11 @@ const AdminDashboard = () => {
     <PageLayout>
       <Navbar rightSlot={navRight} />
       <PageBody>
-        {/* Heading */}
         <div className="mb-6">
           <h1 className="text-2xl font-black tracking-tight text-white">Admin Dashboard</h1>
           <p className="mt-1 text-sm text-white/40">Edit station data — changes sync to Google Sheets</p>
         </div>
 
-        {/* Stat cards */}
         {!isLoading && !isError && (
           <div className="mb-6 grid grid-cols-3 gap-4">
             <StatCard label="Total Stations" value={total}     color="text-white" />
@@ -235,7 +211,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Loading skeleton */}
         {isLoading && (
           <div className="space-y-2">
             <div className="h-10 w-full animate-pulse rounded-lg bg-white/5" />
@@ -245,7 +220,6 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Error state */}
         {isError && (
           <div className="flex flex-col items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-6 py-12 text-center">
             <AlertTriangle size={28} className="text-red-400" />
@@ -254,17 +228,13 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* Table */}
         {!isLoading && !isError && (
           <div className="overflow-x-auto rounded-2xl border border-white/5 bg-white/[0.02]">
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-white/5">
                   {['#', 'Status', 'Current Game', 'Booked Slots', 'Preferred Game', ''].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-xs font-semibold uppercase tracking-widest text-white/30"
-                    >
+                    <th key={h} className="px-4 py-3 text-xs font-semibold uppercase tracking-widest text-white/30">
                       {h}
                     </th>
                   ))}
