@@ -1,39 +1,20 @@
 @import "tailwindcss";
 
-/*
-  Tailwind v4 — all customization goes inside @theme.
-  This replaces tailwind.config.js theme.extend entirely.
-*/
 @theme {
-  /* Colors */
-  --color-bg:              #0d0d0f;
-  --color-surface:         #131318;
-  --color-surface-2:       #1a1a22;
-  --color-surface-offset:  #1f1f2a;
-
-  --color-available:       #22c55e;
-  --color-occupied:        #ef4444;
-  --color-racing:          #f59e0b;
-  --color-accent:          #7c3aed;
-  --color-accent-hover:    #6d28d9;
-
-  /* Font families */
-  --font-body:    'Inter', 'Segoe UI', sans-serif;
-  --font-display: 'Rajdhani', 'Inter', sans-serif;
-
-  /* Border radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --color-bg:             #0d0d0f;
+  --color-surface:        #131318;
+  --color-surface-2:      #1a1a22;
+  --color-surface-offset: #1f1f2a;
+  --color-available:      #22c55e;
+  --color-occupied:       #ef4444;
+  --color-racing:         #f59e0b;
+  --color-accent:         #7c3aed;
+  --color-accent-hover:   #6d28d9;
+  --font-body:            'Inter', 'Segoe UI', sans-serif;
+  --font-display:         'Rajdhani', 'Inter', sans-serif;
 }
 
-/* ─── Base ─── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html {
   -webkit-font-smoothing: antialiased;
@@ -64,43 +45,128 @@ button { cursor: pointer; background: none; border: none; }
   }
 }
 
-/* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #131318; }
 ::-webkit-scrollbar-thumb { background: #1f1f2a; border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: #4a4a60; }
 
-/* ─── Keyframes ─── */
+/* ── Keyframes ── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
 }
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes pulse-glow-green {
-  0%,100% { box-shadow: 0 0 8px rgba(34,197,94,0.3),  0 0 20px rgba(34,197,94,0.1); }
-  50%     { box-shadow: 0 0 16px rgba(34,197,94,0.5), 0 0 32px rgba(34,197,94,0.2); }
-}
-@keyframes pulse-glow-red {
-  0%,100% { box-shadow: 0 0 8px rgba(239,68,68,0.3),  0 0 20px rgba(239,68,68,0.1); }
-  50%     { box-shadow: 0 0 16px rgba(239,68,68,0.5), 0 0 32px rgba(239,68,68,0.2); }
-}
-@keyframes pulse-glow-amber {
-  0%,100% { box-shadow: 0 0 8px rgba(245,158,11,0.3),  0 0 20px rgba(245,158,11,0.1); }
-  50%     { box-shadow: 0 0 16px rgba(245,158,11,0.5), 0 0 32px rgba(245,158,11,0.2); }
-}
 
-/* ─── Station card glow animations ─── */
-.glow-green  { animation: pulse-glow-green  3s ease-in-out infinite; }
-.glow-red    { animation: pulse-glow-red    3s ease-in-out infinite; }
-.glow-amber  { animation: pulse-glow-amber  3s ease-in-out infinite; }
-.fade-in-up  { animation: fadeInUp 0.3s ease both; }
+.fade-in-up { animation: fadeInUp 0.35s ease both; }
 
-/* ─── Skeleton shimmer ─── */
 .skeleton-shimmer {
   background: linear-gradient(90deg, #1f1f2a 25%, #1a1a22 50%, #1f1f2a 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/*
+  ── Station circle fluid sizing ──
+  7 circles must fit in one row inside a max-width:1000px container
+  with 48px padding on each side = 904px usable.
+  Formula: (usable_width - 6_gaps) / 7 = circle_size
+  Gap = clamp(8px, 1.5vw, 20px)
+  Circle = clamp(44px, 8vw, 72px)
+
+  At 320px viewport (mobile min):
+    usable ≈ 320 - 96px padding = 224px
+    7 circles * 44px + 6 * 8px = 308 + 48 = 356 — too wide!
+  So we use vw units: circle = min(8vw, 72px), gap = min(1.5vw, 20px)
+  At 320px: 7 * 25.6px + 6 * 4.8px = 179.2 + 28.8 = 208px ✓
+  At 375px: 7 * 30px   + 6 * 5.6px = 210   + 33.6 = 243px ✓
+  At 768px: 7 * 61px   + 6 * 11.5px = 427  + 69  = 496px  ✓
+  At 1000px+: capped at 72px circles, 20px gaps = 504+120 = 624px ✓
+*/
+
+.station-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;          /* NEVER wrap — must stay one line */
+  justify-content: center;
+  align-items: center;
+  gap: clamp(6px, 1.4vw, 20px);
+  width: 100%;
+}
+
+/* Each station button wrapper */
+.station-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(4px, 0.6vw, 8px);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+  animation: fadeInUp 0.35s ease both;
+}
+
+/* The circle itself — fluid diameter */
+.station-circle {
+  /* clamp: min 40px, prefer 7vw, max 68px */
+  width:  clamp(40px, 7vw, 68px);
+  height: clamp(40px, 7vw, 68px);
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: transform 160ms cubic-bezier(0.16,1,0.3,1),
+              box-shadow  160ms ease;
+  flex-shrink: 0;
+}
+
+.station-circle:hover {
+  transform: scale(1.1);
+}
+
+/* Number inside circle — scales with circle */
+.station-number {
+  font-family: 'Rajdhani', 'Inter', sans-serif;
+  font-weight: 700;
+  /* clamp: 0.75rem at small, scales up to 1.2rem */
+  font-size: clamp(0.72rem, 1.6vw, 1.2rem);
+  color: #fff;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Icon inside circle */
+.station-icon {
+  /* clamp: 9px at smallest, up to 13px */
+  width:  clamp(9px, 1.1vw, 13px);
+  height: clamp(9px, 1.1vw, 13px);
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+/* Sub-label text under circle */
+.station-label {
+  font-size: clamp(0.48rem, 0.9vw, 0.6rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  line-height: 1.3;
+}
+
+.station-game {
+  font-size: clamp(0.42rem, 0.75vw, 0.54rem);
+  color: rgba(255,255,255,0.32);
+  margin-top: 1px;
+  max-width: clamp(40px, 7vw, 68px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
 }
