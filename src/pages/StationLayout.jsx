@@ -1,96 +1,173 @@
 import { useState } from 'react';
 import useStationData from '../hooks/useStationData';
-import Navbar from '../components/Navbar';
-import PageLayout, { PageBody } from '../components/PageLayout';
-import StationCard from '../components/StationCard';
+import StationCircle from '../components/StationCircle';
 import StationModal from '../components/StationModal';
-import StatusLegend from '../components/StatusLegend';
-import SkeletonCard from '../components/SkeletonCard';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import Navbar from '../components/Navbar';
 
-const StationLayout = () => {
-  const { stations, isLoading, isError, refetch } = useStationData();
-  const [selectedStation, setSelectedStation] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+function SkeletonCircle() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+      <div className="skeleton-shimmer" style={{ width: 88, height: 88, borderRadius: '50%' }} />
+      <div className="skeleton-shimmer" style={{ width: 60, height: 10, borderRadius: 4 }} />
+    </div>
+  );
+}
 
-  const handleSelect = (summary) => {
-    const full = stations?.find((s) => s.id === summary.id) || summary;
-    setSelectedStation(full);
-    setIsModalOpen(true);
-  };
+export default function StationLayout() {
+  const { stations, isLoading, isError } = useStationData();
+  const [selected, setSelected] = useState(null);
 
-  const available = stations?.filter((s) => s.status?.toLowerCase() === 'available').length ?? 0;
-  const occupied  = stations?.filter((s) => s.status?.toLowerCase() === 'occupied').length ?? 0;
-  const total     = stations?.length ?? 0;
+  // Split: racing simulator vs PS5 stations
+  const ps5 = stations.filter(s => s.Station_Type !== 'Racing Simulator');
+  const racing = stations.filter(s => s.Station_Type === 'Racing Simulator');
+
+  const available = stations.filter(s => s.Status === 'available' && s.Station_Type !== 'Racing Simulator').length;
+  const occupied  = stations.filter(s => s.Status === 'occupied'  && s.Station_Type !== 'Racing Simulator').length;
 
   return (
-    <PageLayout>
+    <div style={{ minHeight: '100dvh', background: '#0d0d0f', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
-      <PageBody>
-        {/* Page heading */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-black tracking-tight text-white">Station Layout</h1>
-          <p className="mt-1 text-sm text-white/40">Click any station to view details and bookings</p>
-        </div>
 
-        {/* Legend / stats bar */}
-        {!isLoading && !isError && (
-          <div className="mb-6 rounded-xl border border-white/5 bg-white/[0.025] px-5 py-3">
-            <StatusLegend available={available} occupied={occupied} total={total} />
-          </div>
-        )}
+      {/* Ambient background glows */}
+      <div aria-hidden style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        background: `
+          radial-gradient(ellipse 60% 40% at 50% 0%, rgba(124,58,237,0.07) 0%, transparent 70%),
+          radial-gradient(ellipse 40% 30% at 80% 80%, rgba(245,158,11,0.05) 0%, transparent 60%)
+        `,
+      }} />
 
-        {/* Error state */}
-        {isError && (
-          <div className="flex flex-col items-center gap-4 rounded-xl border border-red-500/20 bg-red-500/5 px-6 py-12 text-center">
-            <AlertTriangle size={32} className="text-red-400" />
-            <div>
-              <p className="font-semibold text-red-400">Failed to load station data</p>
-              <p className="mt-1 text-sm text-white/40">Check your Google Sheets configuration</p>
-            </div>
-            <button
-              onClick={() => refetch()}
-              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20"
-            >
-              <RefreshCw size={14} />
-              Retry
-            </button>
-          </div>
-        )}
+      <main style={{ flex: 1, position: 'relative', zIndex: 1, padding: '40px 24px 60px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-        {/* Station grid */}
-        {!isError && (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {isLoading
-              ? Array.from({ length: 15 }).map((_, i) => <SkeletonCard key={i} />)
-              : stations.map((station) => (
-                  <StationCard
-                    key={station.id}
-                    id={station.id}
-                    status={station.status}
-                    currentGame={station.currentGame}
-                    stationType={station.stationType}
-                    onSelect={handleSelect}
-                  />
+          {/* Page title */}
+          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+            <h1 style={{
+              fontFamily: "'Rajdhani', 'Inter', sans-serif",
+              fontWeight: 800,
+              fontSize: 'clamp(1.8rem, 4vw, 2.8rem)',
+              letterSpacing: '-0.02em',
+              color: '#fff',
+              lineHeight: 1.1,
+              marginBottom: 12,
+            }}>
+              GAME<span style={{ color: '#7c3aed' }}>ZONE</span>
+            </h1>
+            <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '0.85rem', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+              Live Station Availability
+            </p>
+
+            {/* Legend */}
+            {!isLoading && !isError && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 20, flexWrap: 'wrap' }}>
+                {[
+                  { color: '#22c55e', label: `${available} Available` },
+                  { color: '#ef4444', label: `${occupied} Occupied` },
+                  { color: '#f59e0b', label: `${racing.length} Racing Sim` },
+                ].map(({ color, label }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: color,
+                      boxShadow: `0 0 6px ${color}`,
+                      display: 'inline-block',
+                    }} />
+                    <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', letterSpacing: '0.06em' }}>{label}</span>
+                  </div>
                 ))}
+              </div>
+            )}
           </div>
-        )}
 
-        {/* Footer note */}
-        {!isLoading && !isError && (
-          <p className="mt-8 text-center text-xs text-white/20">
+          {/* ── FLOOR PLAN AREA ── */}
+          <div style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 24,
+            padding: 'clamp(24px, 4vw, 56px)',
+            position: 'relative',
+            minHeight: 480,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: 48,
+          }}>
+
+            {/* Floor label */}
+            <div style={{
+              position: 'absolute', top: 16, left: 20,
+              fontSize: '0.6rem', letterSpacing: '0.18em',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.15)',
+              fontWeight: 700,
+            }}>Floor Plan · Click a Station</div>
+
+            {/* Loading state */}
+            {isLoading && (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 48 }}>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 'clamp(16px,3vw,40px)', flexWrap: 'wrap' }}>
+                  {Array.from({ length: 6 }).map((_, i) => <SkeletonCircle key={i} />)}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <SkeletonCircle />
+                </div>
+              </div>
+            )}
+
+            {/* Error state */}
+            {isError && (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 12 }}>
+                <span style={{ fontSize: '2rem' }}>⚠️</span>
+                <p style={{ color: '#ef4444', fontSize: '0.9rem' }}>Failed to load station data.</p>
+                <button onClick={() => window.location.reload()} style={{
+                  padding: '8px 20px', borderRadius: 8,
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                  color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem',
+                }}>Retry</button>
+              </div>
+            )}
+
+            {/* ─── Row 3 (middle/top section): 6 PS5 circles ─── */}
+            {!isLoading && !isError && (
+              <>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: 'clamp(14px, 3vw, 48px)',
+                  flexWrap: 'wrap',
+                }}>
+                  {ps5.map(station => (
+                    <StationCircle key={station.Station_ID} station={station} onClick={setSelected} />
+                  ))}
+                </div>
+
+                {/* ─── Bottom row: racing sim aligned right ─── */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', paddingRight: 'clamp(0px, 2vw, 32px)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    {/* Dashed separator line hinting it's a different zone */}
+                    <div style={{
+                      fontSize: '0.6rem', letterSpacing: '0.14em', textTransform: 'uppercase',
+                      color: 'rgba(245,158,11,0.4)', marginBottom: 6, fontWeight: 700,
+                    }}>🏁 Racing Zone</div>
+                    {racing.map(station => (
+                      <StationCircle key={station.Station_ID} station={station} onClick={setSelected} size="lg" />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+          </div>
+
+          {/* Auto-refresh notice */}
+          <p style={{ textAlign: 'center', marginTop: 20, fontSize: '0.7rem', color: 'rgba(255,255,255,0.2)', letterSpacing: '0.06em' }}>
             Auto-refreshes every 30 seconds
           </p>
-        )}
-      </PageBody>
+        </div>
+      </main>
 
-      <StationModal
-        station={selectedStation}
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-      />
-    </PageLayout>
+      {/* Modal */}
+      <StationModal station={selected} onClose={() => setSelected(null)} />
+    </div>
   );
-};
-
-export default StationLayout;
+}
