@@ -1,15 +1,16 @@
 @import "tailwindcss";
+@import "./landing.css";
 
 @theme {
-  --color-bg:             #0d0d0f;
+  --color-bg:             #070709;
   --color-surface:        #131318;
   --color-surface-2:      #1a1a22;
   --color-surface-offset: #1f1f2a;
   --color-available:      #22c55e;
   --color-occupied:       #ef4444;
   --color-racing:         #f59e0b;
-  --color-accent:         #7c3aed;
-  --color-accent-hover:   #6d28d9;
+  --color-accent:         #a855f7;
+  --color-accent-hover:   #7c3aed;
   --font-body:            'Inter', 'Segoe UI', sans-serif;
   --font-display:         'Rajdhani', 'Inter', sans-serif;
 }
@@ -24,8 +25,8 @@ html {
 
 body {
   min-height: 100dvh;
-  background-color: #0d0d0f;
-  color: #e8e8f0;
+  background-color: #070709;
+  color: #f0eeff;
   font-family: 'Inter', 'Segoe UI', sans-serif;
   font-size: 1rem;
   line-height: 1.6;
@@ -35,8 +36,10 @@ img, picture, video, canvas, svg { display: block; max-width: 100%; }
 input, button, textarea, select { font: inherit; color: inherit; }
 button { cursor: pointer; background: none; border: none; }
 
-::selection { background: rgba(124,58,237,0.3); color: #e8e8f0; }
-:focus-visible { outline: 2px solid #7c3aed; outline-offset: 3px; border-radius: 6px; }
+::selection { background: rgba(168,85,247,0.3); color: #f0eeff; }
+:focus-visible { outline: 2px solid #a855f7; outline-offset: 3px; border-radius: 6px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -47,10 +50,9 @@ button { cursor: pointer; background: none; border: none; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #131318; }
-::-webkit-scrollbar-thumb { background: #1f1f2a; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #4a4a60; }
+::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.3); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.6); }
 
-/* ── Keyframes ── */
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
@@ -68,35 +70,16 @@ button { cursor: pointer; background: none; border: none; }
   animation: shimmer 1.5s ease-in-out infinite;
 }
 
-/*
-  ── Station circle fluid sizing ──
-  7 circles must fit in one row inside a max-width:1000px container
-  with 48px padding on each side = 904px usable.
-  Formula: (usable_width - 6_gaps) / 7 = circle_size
-  Gap = clamp(8px, 1.5vw, 20px)
-  Circle = clamp(44px, 8vw, 72px)
-
-  At 320px viewport (mobile min):
-    usable ≈ 320 - 96px padding = 224px
-    7 circles * 44px + 6 * 8px = 308 + 48 = 356 — too wide!
-  So we use vw units: circle = min(8vw, 72px), gap = min(1.5vw, 20px)
-  At 320px: 7 * 25.6px + 6 * 4.8px = 179.2 + 28.8 = 208px ✓
-  At 375px: 7 * 30px   + 6 * 5.6px = 210   + 33.6 = 243px ✓
-  At 768px: 7 * 61px   + 6 * 11.5px = 427  + 69  = 496px  ✓
-  At 1000px+: capped at 72px circles, 20px gaps = 504+120 = 624px ✓
-*/
-
 .station-row {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;          /* NEVER wrap — must stay one line */
+  flex-wrap: nowrap;
   justify-content: center;
   align-items: center;
   gap: clamp(6px, 1.4vw, 20px);
   width: 100%;
 }
 
-/* Each station button wrapper */
 .station-btn {
   display: flex;
   flex-direction: column;
@@ -110,9 +93,7 @@ button { cursor: pointer; background: none; border: none; }
   animation: fadeInUp 0.35s ease both;
 }
 
-/* The circle itself — fluid diameter */
 .station-circle {
-  /* clamp: min 40px, prefer 7vw, max 68px */
   width:  clamp(40px, 7vw, 68px);
   height: clamp(40px, 7vw, 68px);
   border-radius: 50%;
@@ -121,36 +102,25 @@ button { cursor: pointer; background: none; border: none; }
   align-items: center;
   justify-content: center;
   gap: 2px;
-  transition: transform 160ms cubic-bezier(0.16,1,0.3,1),
-              box-shadow  160ms ease;
+  transition: transform 160ms cubic-bezier(0.16,1,0.3,1), box-shadow 160ms ease;
   flex-shrink: 0;
 }
+.station-circle:hover { transform: scale(1.1); }
 
-.station-circle:hover {
-  transform: scale(1.1);
-}
-
-/* Number inside circle — scales with circle */
 .station-number {
   font-family: 'Rajdhani', 'Inter', sans-serif;
   font-weight: 700;
-  /* clamp: 0.75rem at small, scales up to 1.2rem */
   font-size: clamp(0.72rem, 1.6vw, 1.2rem);
   color: #fff;
   line-height: 1;
   pointer-events: none;
 }
-
-/* Icon inside circle */
 .station-icon {
-  /* clamp: 9px at smallest, up to 13px */
   width:  clamp(9px, 1.1vw, 13px);
   height: clamp(9px, 1.1vw, 13px);
   flex-shrink: 0;
   pointer-events: none;
 }
-
-/* Sub-label text under circle */
 .station-label {
   font-size: clamp(0.48rem, 0.9vw, 0.6rem);
   font-weight: 700;
@@ -159,7 +129,6 @@ button { cursor: pointer; background: none; border: none; }
   text-align: center;
   line-height: 1.3;
 }
-
 .station-game {
   font-size: clamp(0.42rem, 0.75vw, 0.54rem);
   color: rgba(255,255,255,0.32);

@@ -1,284 +1,306 @@
-import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import AuthModal from '../components/AuthModal';
-import useAuthStore from '../store/authStore';
 
-const GAMES = [
-  { title: 'God of War Ragnarök',  genre: 'Action RPG',     emoji: '⚔️' },
-  { title: 'Spider-Man 2',         genre: 'Action',         emoji: '🕷️' },
-  { title: 'EA Sports FC 25',      genre: 'Sports',         emoji: '⚽' },
-  { title: 'Mortal Kombat 1',      genre: 'Fighting',       emoji: '🥊' },
-  { title: 'GTA V',                genre: 'Open World',     emoji: '🌆' },
-  { title: 'Gran Turismo 7',       genre: 'Racing',         emoji: '🏎️' },
-];
+/* ── helpers ── */
+function useCountUp(target, duration = 2000, startWhen = true) {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!startWhen) return;
+    let start = null;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      setCount(Math.floor(progress * target));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target, duration, startWhen]);
+  return count;
+}
+
+function useInView(threshold = 0.2) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return [ref, inView];
+}
+
+function StatItem({ value, suffix = '', label, duration = 2000, inView }) {
+  const count = useCountUp(value, duration, inView);
+  return (
+    <div className="stat-item">
+      <span className="stat-value">{count}{suffix}</span>
+      <span className="stat-label">{label}</span>
+    </div>
+  );
+}
 
 const FEATURES = [
-  { icon: '🖥️', title: '14 Monitors',       desc: 'Premium 4K displays with 144Hz refresh rate' },
-  { icon: '🎮', title: 'PS5 Stations',       desc: '13 next-gen consoles, always updated' },
-  { icon: '🏎️', title: 'Racing Simulator',  desc: 'Full force-feedback wheel & pedal setup' },
-  { icon: '⚡', title: 'Live Availability',  desc: 'Real-time station status, no waiting in line' },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="32" height="32">
+        <rect x="2" y="6" width="20" height="14" rx="2" />
+        <path d="M8 6V4h8v2" />
+        <circle cx="12" cy="13" r="1.5" fill="currentColor" />
+        <path d="M9 10v6M15 10v6M6 13h3M15 13h3" />
+      </svg>
+    ),
+    title: 'PS5 Stations',
+    desc: '14 latest-gen Sony PlayStation 5 stations loaded with 80+ game titles.',
+    accent: '#a855f7',
+  },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="32" height="32">
+        <rect x="1" y="4" width="22" height="14" rx="2" />
+        <path d="M8 18v2H5M16 18v2h3" />
+        <path d="M5 9h14M5 12h8" />
+      </svg>
+    ),
+    title: '27″ Monitors',
+    desc: 'Ultra-wide 4K curved displays at 165 Hz — no motion blur, pure immersion.',
+    accent: '#7c3aed',
+  },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="32" height="32">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.4" />
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+      </svg>
+    ),
+    title: 'Racing Simulator',
+    desc: 'Full cockpit racing rig with force-feedback wheel, pedals, and wraparound display.',
+    accent: '#c026d3',
+  },
+  {
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="32" height="32">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+      </svg>
+    ),
+    title: 'Live Availability',
+    desc: 'Real-time station map — see which PS5 is free and what game is running right now.',
+    accent: '#06b6d4',
+  },
+];
+
+const GAMES = [
+  'God of War Ragnarök', 'Spider-Man 2', 'Elden Ring', 'Gran Turismo 7',
+  'Call of Duty', 'FIFA 25', 'Mortal Kombat 1', 'Hogwarts Legacy',
+  'Returnal', 'Ratchet & Clank', 'Demon's Souls', 'Resident Evil 4',
 ];
 
 export default function LandingPage() {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [authOpen, setAuthOpen] = useState(false);
+  const [authModal, setAuthModal] = useState(null);
+  const [statsRef, statsInView]   = useInView(0.3);
+  const [featRef, featInView]     = useInView(0.1);
+  const [gamesRef, gamesInView]   = useInView(0.2);
+  const heroRef = useRef(null);
+
+  /* Particle canvas */
+  useEffect(() => {
+    const canvas = document.getElementById('hero-particles');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let w = canvas.width  = canvas.offsetWidth;
+    let h = canvas.height = canvas.offsetHeight;
+    let raf;
+
+    const particles = Array.from({ length: 80 }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      r: Math.random() * 1.5 + 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      alpha: Math.random() * 0.6 + 0.2,
+    }));
+
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(168,85,247,${p.alpha})`;
+        ctx.fill();
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x = w; if (p.x > w) p.x = 0;
+        if (p.y < 0) p.y = h; if (p.y > h) p.y = 0;
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    draw();
+
+    const resize = () => {
+      w = canvas.width  = canvas.offsetWidth;
+      h = canvas.height = canvas.offsetHeight;
+    };
+    window.addEventListener('resize', resize);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
+  }, []);
 
   return (
-    <div style={{ minHeight:'100dvh', background:'#0d0d0f', color:'#e8e8f0', overflowX:'hidden' }}>
-      <Navbar />
+    <div className="landing-root">
+      <Navbar onAuthClick={setAuthModal} />
+      {authModal && <AuthModal mode={authModal} onClose={() => setAuthModal(null)} />}
 
-      {/* ── AMBIENT GLOWS ── */}
-      <div aria-hidden style={{
-        position:'fixed', inset:0, pointerEvents:'none', zIndex:0,
-        background:`
-          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,58,237,0.18) 0%, transparent 65%),
-          radial-gradient(ellipse 50% 40% at 10% 60%,  rgba(124,58,237,0.07) 0%, transparent 60%),
-          radial-gradient(ellipse 40% 35% at 90% 80%,  rgba(245,158,11,0.06) 0%, transparent 60%)
-        `,
-      }} />
+      {/* ════════ HERO ════════ */}
+      <section className="hero-section" ref={heroRef}>
+        <canvas id="hero-particles" className="hero-canvas" aria-hidden="true" />
 
-      {/* ── HERO ── */}
-      <section style={{
-        position:'relative', zIndex:1,
-        padding:'clamp(60px,10vw,120px) clamp(16px,4vw,40px) clamp(60px,8vw,100px)',
-        textAlign:'center',
-        display:'flex', flexDirection:'column', alignItems:'center',
-      }}>
-        {/* Pill badge */}
-        <div style={{
-          display:'inline-flex', alignItems:'center', gap:8,
-          padding:'5px 14px', borderRadius:99, marginBottom:24,
-          background:'rgba(124,58,237,0.12)',
-          border:'1px solid rgba(124,58,237,0.3)',
-        }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:'#a78bfa', boxShadow:'0 0 6px #a78bfa', display:'inline-block' }} />
-          <span style={{ fontSize:'0.72rem', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'#c4b5fd' }}>Now Open</span>
+        {/* Radial glow blobs */}
+        <div className="hero-blob hero-blob-1" aria-hidden="true" />
+        <div className="hero-blob hero-blob-2" aria-hidden="true" />
+
+        {/* Grid overlay */}
+        <div className="hero-grid" aria-hidden="true" />
+
+        <div className="hero-content">
+          <div className="hero-badge">
+            <span className="hero-badge-dot" />
+            Now open in Surat
+          </div>
+
+          <h1 className="hero-heading">
+            <span className="hero-line hero-line-1">LEVEL UP</span>
+            <span className="hero-line hero-line-2">
+              YOUR <span className="hero-neon">GAME</span>
+            </span>
+          </h1>
+
+          <p className="hero-sub">
+            14 PS5 stations · Ultra-wide 4K · Racing simulator · Real-time booking
+          </p>
+
+          <div className="hero-cta-row">
+            <Link to="/stations" className="cta-primary">
+              <span className="cta-shine" />
+              Check Availability
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+            <button className="cta-secondary" onClick={() => setAuthModal('register')}>
+              Book a Slot
+            </button>
+          </div>
         </div>
 
-        {/* Headline */}
-        <h1 style={{
-          fontFamily:"'Rajdhani','Inter',sans-serif",
-          fontWeight:900,
-          fontSize:'clamp(2.8rem,8vw,6rem)',
-          lineHeight:1.05,
-          letterSpacing:'-0.03em',
-          marginBottom:24,
-          maxWidth:800,
-        }}>
-          <span style={{ color:'#fff' }}>THE ULTIMATE</span><br/>
-          <span style={{
-            background:'linear-gradient(135deg, #a78bfa 0%, #e879f9 50%, #a78bfa 100%)',
-            backgroundSize:'200% 100%',
-            WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
-            backgroundClip:'text',
-          }}>GAMING ZONE</span>
-        </h1>
-
-        {/* Sub */}
-        <p style={{
-          fontSize:'clamp(0.95rem,1.8vw,1.15rem)',
-          color:'rgba(255,255,255,0.45)',
-          maxWidth:480, marginBottom:40, lineHeight:1.7,
-        }}>
-          14 premium monitors · 13 PS5 stations · 1 racing simulator.<br/>
-          Walk in, pick a station, play.
-        </p>
-
-        {/* CTA buttons */}
-        <div style={{ display:'flex', gap:12, flexWrap:'wrap', justifyContent:'center' }}>
-          <button onClick={() => navigate('/stations')} style={{
-            padding:'13px 32px',
-            background:'linear-gradient(135deg,#7c3aed,#9333ea)',
-            border:'1px solid rgba(124,58,237,0.5)',
-            borderRadius:12, color:'#fff',
-            fontFamily:"'Rajdhani','Inter',sans-serif",
-            fontWeight:700, fontSize:'1rem', letterSpacing:'0.04em',
-            cursor:'pointer',
-            boxShadow:'0 0 24px rgba(124,58,237,0.45), 0 4px 16px rgba(0,0,0,0.4)',
-            transition:'all 180ms ease',
-          }}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 0 40px rgba(124,58,237,0.65), 0 4px 20px rgba(0,0,0,0.5)';e.currentTarget.style.transform='translateY(-1px)';}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 0 24px rgba(124,58,237,0.45), 0 4px 16px rgba(0,0,0,0.4)';e.currentTarget.style.transform='translateY(0)';}}>
-            Check Availability
-          </button>
-          {!user && (
-            <button onClick={() => setAuthOpen(true)} style={{
-              padding:'13px 32px',
-              background:'rgba(255,255,255,0.05)',
-              border:'1px solid rgba(255,255,255,0.13)',
-              borderRadius:12, color:'rgba(255,255,255,0.75)',
-              fontFamily:"'Rajdhani','Inter',sans-serif",
-              fontWeight:700, fontSize:'1rem', letterSpacing:'0.04em',
-              cursor:'pointer', transition:'all 180ms ease',
-            }}
-            onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,0.09)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='rgba(255,255,255,0.25)';}}
-            onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.05)';e.currentTarget.style.color='rgba(255,255,255,0.75)';e.currentTarget.style.borderColor='rgba(255,255,255,0.13)';}}>
-            Sign In
-          </button>
-          )}
+        {/* Scroll indicator */}
+        <div className="hero-scroll" aria-hidden="true">
+          <div className="scroll-bar"><div className="scroll-thumb" /></div>
         </div>
 
-        {/* Stats row */}
-        <div style={{
-          display:'flex', gap:'clamp(24px,5vw,56px)', marginTop:56, flexWrap:'wrap', justifyContent:'center',
-        }}>
-          {[
-            { num:'13', label:'PS5 Stations' },
-            { num:'14', label:'4K Monitors' },
-            { num:'1',  label:'Racing Sim' },
-            { num:'∞',  label:'Good Times' },
-          ].map(({ num, label }) => (
-            <div key={label} style={{ textAlign:'center' }}>
-              <div style={{
-                fontFamily:"'Rajdhani','Inter',sans-serif",
-                fontWeight:800, fontSize:'clamp(1.8rem,4vw,2.6rem)',
-                color:'#a78bfa', lineHeight:1,
-                textShadow:'0 0 20px rgba(167,139,250,0.5)',
-              }}>{num}</div>
-              <div style={{ fontSize:'0.72rem', color:'rgba(255,255,255,0.35)', letterSpacing:'0.1em', textTransform:'uppercase', marginTop:4 }}>{label}</div>
+        {/* Diagonal slice bottom */}
+        <div className="hero-slice" aria-hidden="true" />
+      </section>
+
+      {/* ════════ STATS ════════ */}
+      <section className="stats-section" ref={statsRef}>
+        <div className="stats-neon-line stats-neon-top" />
+        <div className="stats-inner">
+          <StatItem value={14}   suffix=""   label="PS5 Stations"       inView={statsInView} />
+          <div className="stats-divider" />
+          <StatItem value={27}   suffix="″"  label="Monitor Size"       inView={statsInView} duration={1500} />
+          <div className="stats-divider" />
+          <StatItem value={80}   suffix="+"  label="Game Titles"        inView={statsInView} duration={2200} />
+          <div className="stats-divider" />
+          <StatItem value={1}    suffix=""   label="Racing Simulator"   inView={statsInView} duration={800}  />
+          <div className="stats-divider" />
+          <StatItem value={165}  suffix="Hz" label="Refresh Rate"       inView={statsInView} duration={1800} />
+        </div>
+        <div className="stats-neon-line stats-neon-bottom" />
+        <div className="stats-slice" />
+      </section>
+
+      {/* ════════ FEATURES ════════ */}
+      <section className="features-section" ref={featRef}>
+        <div className="section-header">
+          <p className="section-eyebrow">What we offer</p>
+          <h2 className="section-title">Everything you need to <span className="section-title-accent">dominate</span></h2>
+        </div>
+
+        <div className="features-grid">
+          {FEATURES.map((f, i) => (
+            <div
+              key={f.title}
+              className={`feature-slab${featInView ? ' feat-visible' : ''}`}
+              style={{ '--feat-delay': `${i * 120}ms`, '--feat-accent': f.accent }}
+            >
+              <div className="feat-running-border" />
+              <div className="feat-icon" style={{ color: f.accent }}>{f.icon}</div>
+              <h3 className="feat-title">{f.title}</h3>
+              <p className="feat-desc">{f.desc}</p>
+              <div className="feat-slash" />
             </div>
           ))}
         </div>
+
+        <div className="features-slice" />
       </section>
 
-      {/* ── FEATURES ── */}
-      <section style={{
-        position:'relative', zIndex:1,
-        padding:'clamp(48px,7vw,80px) clamp(16px,4vw,40px)',
-      }}>
-        <div style={{ maxWidth:1000, margin:'0 auto' }}>
-          <div style={{ textAlign:'center', marginBottom:'clamp(32px,5vw,52px)' }}>
-            <h2 style={{
-              fontFamily:"'Rajdhani','Inter',sans-serif",
-              fontWeight:800, fontSize:'clamp(1.5rem,3.5vw,2.2rem)',
-              color:'#fff', letterSpacing:'-0.02em', marginBottom:10,
-            }}>What We Offer</h2>
-            <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'0.88rem' }}>Everything you need for a legendary session</p>
-          </div>
-
-          <div style={{
-            display:'grid',
-            gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
-            gap:'clamp(12px,2vw,20px)',
-          }}>
-            {FEATURES.map(({ icon, title, desc }) => (
-              <div key={title} style={{
-                background:'rgba(255,255,255,0.025)',
-                border:'1px solid rgba(255,255,255,0.07)',
-                borderRadius:16, padding:'clamp(18px,2.5vw,28px)',
-                transition:'border-color 180ms ease, transform 180ms ease',
-              }}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor='rgba(124,58,237,0.3)';e.currentTarget.style.transform='translateY(-2px)';}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.07)';e.currentTarget.style.transform='translateY(0)';}}>
-                <div style={{ fontSize:'2rem', marginBottom:12 }}>{icon}</div>
-                <div style={{
-                  fontFamily:"'Rajdhani','Inter',sans-serif",
-                  fontWeight:700, fontSize:'1rem', color:'#fff', marginBottom:6,
-                }}>{title}</div>
-                <div style={{ fontSize:'0.8rem', color:'rgba(255,255,255,0.38)', lineHeight:1.6 }}>{desc}</div>
-              </div>
+      {/* ════════ GAME TICKER ════════ */}
+      <section className="ticker-section" ref={gamesRef}>
+        <div className="ticker-top-slash" />
+        <p className="ticker-eyebrow">Now playing across stations</p>
+        <div className="ticker-track" aria-hidden="true">
+          <div className="ticker-inner">
+            {[...GAMES, ...GAMES].map((g, i) => (
+              <span key={i} className="ticker-item">
+                <span className="ticker-dot" />
+                {g}
+              </span>
             ))}
           </div>
         </div>
+        <div className="ticker-bottom-slash" />
       </section>
 
-      {/* ── GAMES MARQUEE ── */}
-      <section style={{
-        position:'relative', zIndex:1,
-        padding:'clamp(40px,6vw,64px) 0',
-        borderTop:'1px solid rgba(255,255,255,0.05)',
-        borderBottom:'1px solid rgba(255,255,255,0.05)',
-        overflow:'hidden',
-      }}>
-        <div style={{ textAlign:'center', marginBottom:28 }}>
-          <h2 style={{
-            fontFamily:"'Rajdhani','Inter',sans-serif",
-            fontWeight:800, fontSize:'clamp(1.4rem,3vw,2rem)',
-            color:'#fff', letterSpacing:'-0.02em',
-          }}>Popular Titles</h2>
-        </div>
-        <div style={{
-          display:'flex', gap:'clamp(12px,2vw,20px)',
-          flexWrap:'wrap', justifyContent:'center',
-          padding:'0 clamp(16px,4vw,40px)',
-        }}>
-          {GAMES.map(({ title, genre, emoji }) => (
-            <div key={title} style={{
-              display:'flex', alignItems:'center', gap:10,
-              padding:'10px 18px', borderRadius:12,
-              background:'rgba(255,255,255,0.03)',
-              border:'1px solid rgba(255,255,255,0.07)',
-              transition:'border-color 160ms ease',
-            }}
-            onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(167,139,250,0.3)'}
-            onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(255,255,255,0.07)'}>
-              <span style={{ fontSize:'1.3rem' }}>{emoji}</span>
-              <div>
-                <div style={{ fontSize:'0.85rem', fontWeight:600, color:'#e8e8f0' }}>{title}</div>
-                <div style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.3)', letterSpacing:'0.06em' }}>{genre}</div>
-              </div>
-            </div>
-          ))}
+      {/* ════════ CTA BANNER ════════ */}
+      <section className="cta-banner" id="pricing">
+        <div className="cta-banner-glow" />
+        <div className="cta-banner-border" />
+        <div className="cta-banner-inner">
+          <p className="cta-banner-eyebrow">Ready to play?</p>
+          <h2 className="cta-banner-heading">Walk in. <span className="cta-neon">Power on.</span> Play.</h2>
+          <p className="cta-banner-sub">No membership required. Pay per hour or book a slot in advance.</p>
+          <div className="hero-cta-row">
+            <Link to="/stations" className="cta-primary">
+              <span className="cta-shine" />
+              View Live Stations
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+            <button className="cta-secondary" onClick={() => setAuthModal('register')}>
+              Create Account
+            </button>
+          </div>
         </div>
       </section>
 
-      {/* ── CTA BANNER ── */}
-      <section style={{
-        position:'relative', zIndex:1,
-        padding:'clamp(56px,8vw,96px) clamp(16px,4vw,40px)',
-        textAlign:'center',
-      }}>
-        <div style={{
-          maxWidth:600, margin:'0 auto',
-          padding:'clamp(36px,5vw,56px)',
-          background:'rgba(124,58,237,0.07)',
-          border:'1px solid rgba(124,58,237,0.2)',
-          borderRadius:24,
-          boxShadow:'0 0 60px rgba(124,58,237,0.1)',
-        }}>
-          <h2 style={{
-            fontFamily:"'Rajdhani','Inter',sans-serif",
-            fontWeight:800, fontSize:'clamp(1.5rem,3.5vw,2.2rem)',
-            color:'#fff', letterSpacing:'-0.02em', marginBottom:12,
-          }}>Ready to Play?</h2>
-          <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'0.9rem', marginBottom:28, lineHeight:1.7 }}>
-            Check live availability and walk straight in.
-          </p>
-          <button onClick={() => navigate('/stations')} style={{
-            padding:'12px 36px',
-            background:'linear-gradient(135deg,#7c3aed,#9333ea)',
-            border:'1px solid rgba(124,58,237,0.5)',
-            borderRadius:12, color:'#fff',
-            fontFamily:"'Rajdhani','Inter',sans-serif",
-            fontWeight:700, fontSize:'1rem', letterSpacing:'0.05em',
-            cursor:'pointer',
-            boxShadow:'0 0 24px rgba(124,58,237,0.4)',
-            transition:'all 180ms ease',
-          }}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 0 40px rgba(124,58,237,0.6)';e.currentTarget.style.transform='translateY(-1px)';}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow='0 0 24px rgba(124,58,237,0.4)';e.currentTarget.style.transform='translateY(0)';}}>
-            View Stations →
-          </button>
+      {/* ════════ FOOTER ════════ */}
+      <footer className="landing-footer" id="contact">
+        <div className="footer-neon-top" />
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
+              <rect width="40" height="40" rx="10" fill="rgba(124,58,237,0.3)" />
+              <path d="M10 20 L16 12 L24 12 L24 17 L20 17 L20 14 L17 14 L13 20 L17 26 L20 26 L20 23 L24 23 L24 28 L16 28 Z" fill="#a855f7" />
+            </svg>
+            <span className="footer-name">GAMEZONE</span>
+          </div>
+          <p className="footer-tagline">Surat's premium gaming arena</p>
+          <p className="footer-copy">© {new Date().getFullYear()} GameZone. All rights reserved.</p>
         </div>
-      </section>
-
-      {/* ── FOOTER ── */}
-      <footer style={{
-        position:'relative', zIndex:1,
-        padding:'20px clamp(16px,4vw,40px)',
-        borderTop:'1px solid rgba(255,255,255,0.05)',
-        display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8,
-      }}>
-        <span style={{
-          fontFamily:"'Rajdhani','Inter',sans-serif",
-          fontWeight:700, color:'rgba(255,255,255,0.2)', fontSize:'0.8rem', letterSpacing:'0.08em',
-        }}>GAME<span style={{ color:'rgba(167,139,250,0.4)' }}>ZONE</span></span>
-        <span style={{ fontSize:'0.72rem', color:'rgba(255,255,255,0.18)' }}>© 2026 All rights reserved</span>
       </footer>
-
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} defaultTab="login" />
     </div>
   );
 }
