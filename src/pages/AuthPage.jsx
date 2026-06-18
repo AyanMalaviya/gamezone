@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loginWithGoogle } from '../hooks/useAuth';
 import useAuthStore from '../store/authStore';
+import GameCaptcha from '../components/GameCaptcha';
 import '../styles/auth.css';
 
 const GoogleIcon = () => (
@@ -83,15 +84,18 @@ export default function AuthPage() {
   const user        = useAuthStore(s => s.user);
   const authLoading = useAuthStore(s => s.loading);
 
-  const [tab, setTab]             = useState(mode === 'register' ? 'register' : 'login');
-  const [email, setEmail]         = useState('');
-  const [password, setPassword]   = useState('');
-  const [phone, setPhone]         = useState('');
-  const [showPw, setShowPw]       = useState(false);
-  const [busy, setBusy]           = useState(false);
-  const [error, setError]         = useState('');
-  const [verifyScreen, setVerify] = useState(false);
-  const [verifyEmail, setVerifyEmail] = useState('');
+  const [tab, setTab]                   = useState(mode === 'register' ? 'register' : 'login');
+  const [email, setEmail]               = useState('');
+  const [password, setPassword]         = useState('');
+  const [phone, setPhone]               = useState('');
+  const [showPw, setShowPw]             = useState(false);
+  const [busy, setBusy]                 = useState(false);
+  const [error, setError]               = useState('');
+  const [verifyScreen, setVerify]       = useState(false);
+  const [verifyEmail, setVerifyEmail]   = useState('');
+  // CAPTCHA state — shown after user fills form, before submit
+  const [showCaptcha, setShowCaptcha]   = useState(false);
+  const [captchaDone, setCaptchaDone]   = useState(false);
   const sliderRef = useRef(null);
 
   useEffect(() => {
@@ -100,7 +104,11 @@ export default function AuthPage() {
 
   useEffect(() => { navigate(`/auth/${tab}`, { replace: true }); }, [tab]); // eslint-disable-line
 
-  const resetForm = () => { setEmail(''); setPassword(''); setPhone(''); setError(''); setShowPw(false); setVerify(false); };
+  const resetForm = () => {
+    setEmail(''); setPassword(''); setPhone('');
+    setError(''); setShowPw(false); setVerify(false);
+    setShowCaptcha(false); setCaptchaDone(false);
+  };
   const switchTab = (t) => { setTab(t); resetForm(); };
 
   const normalizePhone = (raw) => {
@@ -121,31 +129,49 @@ export default function AuthPage() {
     return msg.replace('Firebase: ', '').replace(/\s*\(.*\)/, '') || 'Something went wrong.';
   };
 
-  const handleEmail = async (e) => {
+  // Step 1 — validate form fields, then show CAPTCHA
+  const handleFormNext = (e) => {
     e.preventDefault();
-    setError(''); setBusy(true);
+    setError('');
+
+    if (!isLogin) {
+      if (!phone.trim()) { setError('Phone number is required to book stations.'); return; }
+      const normalized = normalizePhone(phone.trim());
+      if (!/^\+91[6-9]\d{9}$/.test(normalized)) { setError('Enter a valid 10-digit Indian mobile number.'); return; }
+    }
+
+    if (!captchaDone) {
+      setShowCaptcha(true);
+      return;
+    }
+
+    // Already verified — proceed directly
+    submitAuth();
+  };
+
+  // Step 2 — CAPTCHA passed, now actually authenticate
+  const handleCaptchaVerified = () => {
+    setCaptchaDone(true);
+    setShowCaptcha(false);
+    submitAuth();
+  };
+
+  const submitAuth = async () => {
+    setBusy(true);
+    setError('');
     try {
-      if (tab === 'login') {
+      if (isLogin) {
         await loginWithEmail(email, password);
       } else {
-        // Validate phone
-        if (!phone.trim()) {
-          setError('Phone number is required to book stations.');
-          setBusy(false);
-          return;
-        }
         const normalized = normalizePhone(phone.trim());
-        if (!/^\+91[6-9]\d{9}$/.test(normalized)) {
-          setError('Enter a valid 10-digit Indian mobile number.');
-          setBusy(false);
-          return;
-        }
         await registerWithEmail(email, password, normalized);
         setVerifyEmail(email);
         setVerify(true);
       }
     } catch (err) {
       setError(friendly(err.code ?? '', err.message ?? ''));
+      // Reset CAPTCHA so user must pass it again on next attempt
+      setCaptchaDone(false);
     } finally { setBusy(false); }
   };
 
@@ -202,7 +228,7 @@ export default function AuthPage() {
               <p>{isLogin ? 'Sign in to access your GameZone' : 'Join GameZone and start playing'}</p>
             </div>
 
-            {/* Phone required notice — Login tab only */}
+            {/* Phone notice — Login tab */}
             {isLogin && (
               <div style={{
                 display: 'flex', gap: 8, alignItems: 'flex-start',
@@ -230,7 +256,7 @@ export default function AuthPage() {
               <span /><p>or continue with email</p><span />
             </div>
 
-            <form onSubmit={handleEmail} className="auth-form" noValidate>
+            <form onSubmit={handleFormNext} className="auth-form" noValidate>
               <div className="auth-field">
                 <label htmlFor="auth-email">Email</label>
                 <div className="auth-input-wrap">
@@ -275,21 +301,21 @@ export default function AuthPage() {
                   <div className="auth-input-wrap">
                     <Phone size={15} className="auth-input-icon" />
                     <input
-                      id="auth-phone"
-                      type="tel"
-                      placeholder="98765 43210"
+                      id="auth-phone" type="tel" placeholder="98765 43210"
                       value={phone}
                       onChange={e => { setPhone(e.target.value); setError(''); }}
                       autoComplete="tel"
                     />
                   </div>
-                  <p style={{
-                    fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)',
-                    marginTop: 4, paddingLeft: 2,
-                  }}>
+                  <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: 4, paddingLeft: 2 }}>
                     Indian mobile number (+91). Used only for booking confirmations.
                   </p>
                 </div>
+              )}
+
+              {/* CAPTCHA — slides in after form is filled */}
+              {showCaptcha && (
+                <GameCaptcha onVerified={handleCaptchaVerified} />
               )}
 
               {error && (
@@ -298,7 +324,7 @@ export default function AuthPage() {
                 </div>
               )}
 
-              {isLogin && (
+              {isLogin && !showCaptcha && (
                 <div className="auth-alert" role="note" style={{
                   background: 'rgba(124,58,237,0.07)',
                   border: '1px solid rgba(124,58,237,0.18)',
@@ -311,10 +337,15 @@ export default function AuthPage() {
                 </div>
               )}
 
-              <button type="submit" disabled={busy} className="auth-submit">
-                {busy ? <Loader2 size={16} className="auth-spin" /> : isLogin ? 'Sign In' : 'Create Account'}
-                <div className="auth-submit-shine" />
-              </button>
+              {/* Hide main submit while CAPTCHA is open */}
+              {!showCaptcha && (
+                <button type="submit" disabled={busy} className="auth-submit">
+                  {busy
+                    ? <Loader2 size={16} className="auth-spin" />
+                    : isLogin ? 'Sign In' : 'Create Account'}
+                  <div className="auth-submit-shine" />
+                </button>
+              )}
             </form>
 
             <p className="auth-switch">
