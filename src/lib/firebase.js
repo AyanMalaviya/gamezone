@@ -13,5 +13,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db   = getFirestore(app);
+
+// GoogleAuthProvider with Sheets write scope.
+// This makes Google return an OAuth2 access_token that is authorised
+// to call the Sheets API (read + write). Without this scope the token
+// is only valid for Google Identity / profile APIs and Sheets PUT
+// requests will return 403 PERMISSION_DENIED.
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
+// Force account picker every time so the access_token is always fresh.
+googleProvider.setCustomParameters({ prompt: 'consent' });
