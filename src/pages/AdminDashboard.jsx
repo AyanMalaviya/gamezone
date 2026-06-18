@@ -77,7 +77,7 @@ const LoginPage = ({ onLogin, busy }) => (
         <div className="login-divider"><span>GOOGLE AUTH</span></div>
         <button onClick={onLogin} disabled={busy} className="login-btn">
           {busy ? <Loader2 size={18} className="adm-spin" /> : <GoogleIcon />}
-          <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
+          <span>{busy ? 'Authenticating\u2026' : 'Sign in with Google'}</span>
           <div className="login-shine" />
         </button>
         <p className="login-note">Only authorised admins can access this panel</p>
@@ -98,14 +98,14 @@ const StationRow = ({ station, index, oauthToken }) => {
   const [form, setForm]     = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
-  const [err,    setErr]    = useState(false);
+  const [err,    setErr]    = useState(null);
 
   useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
 
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
   const onSave = async () => {
-    setSaving(true); setErr(false);
+    setSaving(true); setErr(null);
     try {
       await updateStation(index, {
         id:            station.id,
@@ -119,8 +119,8 @@ const StationRow = ({ station, index, oauthToken }) => {
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       console.error(e);
-      setErr(true);
-      setTimeout(() => setErr(false), 3000);
+      setErr(e.message || 'Save failed');
+      setTimeout(() => setErr(null), 5000);
     } finally { setSaving(false); }
   };
 
@@ -151,17 +151,41 @@ const StationRow = ({ station, index, oauthToken }) => {
         value={form.preferredGame} onChange={onChange}
         placeholder="Preferred game" className="ni" /></td>
       <td className="td-sv">
+        {err && <p className="sv-errmsg" title={err}>⚠️ {err}</p>}
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
           {saving ? <Loader2 size={13} className="adm-spin" />
             : saved ? <CheckCircle2 size={13} />
             : err   ? <AlertTriangle size={13} />
             : <Save size={13} />}
-          <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
+          <span>{saving ? 'Saving\u2026' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
         </button>
       </td>
     </tr>
   );
+};
+
+/**
+ * extractOAuthToken — reliably pulls the Google OAuth2 access token
+ * from a signInWithPopup result.
+ *
+ * Why not just credentialFromResult?
+ * GoogleAuthProvider.credentialFromResult() returns null on repeat sign-ins
+ * when Google skips the consent screen (even with prompt:'consent', Firebase
+ * may cache the session). The raw access token is always present on
+ * result._tokenResponse.oauthAccessToken regardless.
+ */
+const extractOAuthToken = (result) => {
+  // Primary: standard credential API
+  const cred = GoogleAuthProvider.credentialFromResult(result);
+  if (cred?.accessToken) return cred.accessToken;
+
+  // Fallback: undocumented but stable internal field Firebase uses internally
+  // eslint-disable-next-line no-underscore-dangle
+  const raw = result?._tokenResponse?.oauthAccessToken;
+  if (raw) return raw;
+
+  return null;
 };
 
 export default function AdminDashboard() {
@@ -196,8 +220,11 @@ export default function AdminDashboard() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       setUser(result.user);
-      const cred = GoogleAuthProvider.credentialFromResult(result);
-      setOauthToken(cred?.accessToken ?? null);
+      const token = extractOAuthToken(result);
+      if (import.meta.env.DEV) {
+        console.info('[admin] oauthToken extracted:', token ? token.slice(0, 12) + '\u2026' : 'NULL');
+      }
+      setOauthToken(token);
     } catch (e) {
       console.error(e);
       alert('Sign-in failed. Try again.');
@@ -250,8 +277,8 @@ export default function AdminDashboard() {
 
         {!oauthToken && (
           <div className="adm-warn">
-            <Zap size={13} />
-            <span>Sign out and sign in again to enable write access to Google Sheets</span>
+            <AlertTriangle size={13} />
+            <span>OAuth token missing — sign out and sign in again to enable write access</span>
           </div>
         )}
 
