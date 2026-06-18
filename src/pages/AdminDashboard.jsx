@@ -4,10 +4,11 @@ import {
   Gamepad2, Zap, Clock, Star,
   RefreshCw, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
+import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
-import { auth, googleProvider, signInWithPopup, signOut } from '../lib/firebase';
+import { auth, googleProvider } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
@@ -210,8 +211,6 @@ export default function AdminDashboard() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       setUser(result.user);
-      // Capture OAuth token for Sheets write access
-      const { GoogleAuthProvider } = await import('firebase/auth');
       const cred = GoogleAuthProvider.credentialFromResult(result);
       setOauthToken(cred?.accessToken ?? null);
     } catch (e) {
@@ -239,13 +238,13 @@ export default function AdminDashboard() {
 
       <main className="adm-body">
 
-        {/* ── Header ───────────────────────────────────────────────── */}
+        {/* ── Header ──────────────────────────────────────────── */}
         <div className="adm-hdr">
           <div className="adm-hdr-l">
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
             <div>
               <h1 className="adm-title">STATION CONTROL</h1>
-              <p className="adm-sub">Live Google Sheets sync&nbsp;•&nbsp;{user.email}</p>
+              <p className="adm-sub">Live Google Sheets sync • {user.email}</p>
             </div>
           </div>
           <div className="adm-hdr-r">
@@ -258,14 +257,14 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ── Neon divider ─────────────────────────────────────────── */}
+        {/* ── Neon divider ───────────────────────────────────── */}
         <div className="adm-divider" aria-hidden="true">
           <div className="adm-div-line" />
           <span className="adm-div-txt">LIVE DATA</span>
           <div className="adm-div-line" />
         </div>
 
-        {/* ── Stat cards ───────────────────────────────────────────── */}
+        {/* ── Stat cards ───────────────────────────────────────── */}
         <div className="sc-grid">
           <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
           <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
@@ -273,7 +272,7 @@ export default function AdminDashboard() {
           <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* ── OAuth warning ────────────────────────────────────────── */}
+        {/* ── OAuth warning ────────────────────────────────────── */}
         {!oauthToken && (
           <div className="adm-warn">
             <Zap size={13} />
@@ -281,7 +280,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Loading ──────────────────────────────────────────────── */}
+        {/* ── Loading ──────────────────────────────────────────── */}
         {isLoading && (
           <div className="adm-skeletons">
             {[...Array(6)].map((_, i) => (
@@ -290,7 +289,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Error ────────────────────────────────────────────────── */}
+        {/* ── Error ──────────────────────────────────────────────── */}
         {isError && (
           <div className="adm-error">
             <AlertTriangle size={32} />
@@ -299,7 +298,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Table ────────────────────────────────────────────────── */}
+        {/* ── Table ──────────────────────────────────────────────── */}
         {!isLoading && !isError && (
           <div className="tbl-wrap">
             <div className="tbl-neon tbl-neon-top" />
