@@ -26,7 +26,6 @@ export async function loginWithEmail(email, password) {
 
 export async function registerWithEmail(email, password, phoneOrName) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  // phoneOrName: if looks like a phone number store as phone, else as name
   const isPhone = /^[+\d]/.test(phoneOrName);
   await createUserProfile(cred.user.uid, {
     email,
@@ -40,7 +39,6 @@ export async function registerWithEmail(email, password, phoneOrName) {
 
 export async function loginWithGoogle() {
   const cred = await signInWithPopup(auth, googleProvider);
-  // Create profile if first-time Google login
   const existing = await getUserProfile(cred.user.uid);
   if (!existing) {
     await createUserProfile(cred.user.uid, {
@@ -61,7 +59,8 @@ export async function savePhone(uid, phone) {
 
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
-  const setProfile = useAuthStore(s => s.setProfile);
+  const setRole    = useAuthStore(s => s.setRole);
+  const setPhone   = useAuthStore(s => s.setPhone);
   const setLoading = useAuthStore(s => s.setLoading);
 
   useEffect(() => {
@@ -69,15 +68,18 @@ export function useAuthListener() {
       if (firebaseUser) {
         setUser(firebaseUser);
         const prof = await getUserProfile(firebaseUser.uid);
-        setProfile(prof);
+        // prof shape: { email, name, phone, role, ... }
+        setRole(prof?.role  ?? null);
+        setPhone(prof?.phone ?? null);
       } else {
         setUser(null);
-        setProfile(null);
+        setRole(null);
+        setPhone(null);
       }
       setLoading(false);
     });
     return unsub;
-  }, [setUser, setProfile, setLoading]);
+  }, [setUser, setRole, setPhone, setLoading]);
 }
 
 // ─── Hook: local state version (used inside components that don't use Zustand) ───
