@@ -6,12 +6,13 @@ import {
   RefreshCw, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
-import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
 import { auth, googleProvider } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -46,7 +47,6 @@ const StatCard = ({ label, value, Icon, glow }) => {
     }, 38);
     return () => clearInterval(id);
   }, [value]);
-
   return (
     <div className="sc" style={{ '--g': glow }}>
       <div className="sc-inner">
@@ -61,23 +61,45 @@ const StatCard = ({ label, value, Icon, glow }) => {
   );
 };
 
-const LoginPage = ({ onLogin, busy }) => (
+/**
+ * extractOAuthToken — pulls the Google OAuth2 access token from
+ * a signInWithPopup result using two fallback strategies.
+ *
+ * credentialFromResult() returns null on repeat sign-ins when
+ * Firebase reuses a cached session. _tokenResponse.oauthAccessToken
+ * is always populated by Firebase internally.
+ */
+const extractOAuthToken = (result) => {
+  const cred = GoogleAuthProvider.credentialFromResult(result);
+  if (cred?.accessToken) return cred.accessToken;
+  // eslint-disable-next-line no-underscore-dangle
+  return result?._tokenResponse?.oauthAccessToken ?? null;
+};
+
+// ─── LoginPage ───────────────────────────────────────────────────────────────
+
+const LoginPage = ({ onLogin, busy, error }) => (
   <div className="adm-login-wrap">
     <NeonBg />
     <Navbar />
     <div className="login-center">
       <div className="login-card">
-        <span className="lc-edge lc-top"    />
-        <span className="lc-edge lc-right"  />
+        <span className="lc-edge lc-top" />
+        <span className="lc-edge lc-right" />
         <span className="lc-edge lc-bottom" />
-        <span className="lc-edge lc-left"   />
+        <span className="lc-edge lc-left" />
         <div className="login-shield"><ShieldCheck size={34} /></div>
         <h1 className="login-title">ADMIN ACCESS</h1>
         <p className="login-sub">Restricted zone — authenticate to proceed</p>
+        {error && (
+          <div className="adm-warn" style={{ marginBottom: '1rem' }}>
+            <AlertTriangle size={13} /><span>{error}</span>
+          </div>
+        )}
         <div className="login-divider"><span>GOOGLE AUTH</span></div>
         <button onClick={onLogin} disabled={busy} className="login-btn">
           {busy ? <Loader2 size={18} className="adm-spin" /> : <GoogleIcon />}
-          <span>{busy ? 'Authenticating\u2026' : 'Sign in with Google'}</span>
+          <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
           <div className="login-shine" />
         </button>
         <p className="login-note">Only authorised admins can access this panel</p>
@@ -85,6 +107,8 @@ const LoginPage = ({ onLogin, busy }) => (
     </div>
   </div>
 );
+
+// ─── StationRow ──────────────────────────────────────────────────────────────
 
 const StationRow = ({ station, index, oauthToken }) => {
   const init = () => ({
@@ -118,9 +142,9 @@ const StationRow = ({ station, index, oauthToken }) => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
-      console.error(e);
+      console.error('[StationRow] save error:', e.message);
       setErr(e.message || 'Save failed');
-      setTimeout(() => setErr(null), 5000);
+      setTimeout(() => setErr(null), 6000);
     } finally { setSaving(false); }
   };
 
@@ -130,7 +154,7 @@ const StationRow = ({ station, index, oauthToken }) => {
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
       <td className="td-id">
         <div className="id-badge">
-          <span>{String(station.id).padStart(2, '0')}</span>
+          <span>{String(station.id || index + 1).padStart(2, '0')}</span>
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
@@ -151,87 +175,103 @@ const StationRow = ({ station, index, oauthToken }) => {
         value={form.preferredGame} onChange={onChange}
         placeholder="Preferred game" className="ni" /></td>
       <td className="td-sv">
-        {err && <p className="sv-errmsg" title={err}>⚠️ {err}</p>}
+        {err && (
+          <p className="sv-errmsg" title={err} style={{
+            fontSize: '0.65rem', color: 'var(--color-error, #f87171)',
+            marginBottom: '4px', maxWidth: '180px', wordBreak: 'break-word',
+          }}>
+            ⚠ {err}
+          </p>
+        )}
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
           {saving ? <Loader2 size={13} className="adm-spin" />
             : saved ? <CheckCircle2 size={13} />
             : err   ? <AlertTriangle size={13} />
             : <Save size={13} />}
-          <span>{saving ? 'Saving\u2026' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
+          <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
         </button>
       </td>
     </tr>
   );
 };
 
-/**
- * extractOAuthToken — reliably pulls the Google OAuth2 access token
- * from a signInWithPopup result.
- *
- * Why not just credentialFromResult?
- * GoogleAuthProvider.credentialFromResult() returns null on repeat sign-ins
- * when Google skips the consent screen (even with prompt:'consent', Firebase
- * may cache the session). The raw access token is always present on
- * result._tokenResponse.oauthAccessToken regardless.
- */
-const extractOAuthToken = (result) => {
-  // Primary: standard credential API
-  const cred = GoogleAuthProvider.credentialFromResult(result);
-  if (cred?.accessToken) return cred.accessToken;
-
-  // Fallback: undocumented but stable internal field Firebase uses internally
-  // eslint-disable-next-line no-underscore-dangle
-  const raw = result?._tokenResponse?.oauthAccessToken;
-  if (raw) return raw;
-
-  return null;
-};
+// ─── AdminDashboard ──────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
-  const user          = useAuthStore(s => s.user);
-  const setUser       = useAuthStore(s => s.setUser);
-  const oauthToken    = useAuthStore(s => s.oauthToken);
-  const setOauthToken = useAuthStore(s => s.setOauthToken);
+  /**
+   * Admin auth is FULLY LOCAL to this component.
+   *
+   * We do NOT rely on the global Zustand auth store for admin access because
+   * onAuthStateChanged sets `user` for ANY signed-in user (including regular
+   * customers). If we checked the store's `user`, the LoginPage would be
+   * skipped for any logged-in customer, the Google popup would never fire,
+   * and oauthToken would remain null forever.
+   *
+   * Instead, the admin must always go through signInWithPopup() here to get
+   * a fresh OAuth access token scoped to Google Sheets.
+   */
+  const [adminUser,   setAdminUser]   = useState(null);
+  const [adminToken,  setAdminToken]  = useState(null);
+  const [loginBusy,   setLoginBusy]   = useState(false);
+  const [loginError,  setLoginError]  = useState(null);
 
-  const [loginBusy, setLoginBusy] = useState(false);
   const { stations, isLoading, isError, refetch } = useStationData();
   const navigate = useNavigate();
   const zapRef   = useRef(null);
 
   useEffect(() => {
-    if (!zapRef.current) return;
+    if (!zapRef.current || !adminUser) return;
     let h = 0;
     const id = setInterval(() => {
       h = (h + 0.8) % 360;
       if (zapRef.current) zapRef.current.style.filter = `hue-rotate(${h}deg)`;
     }, 20);
     return () => clearInterval(id);
-  }, [user]);
+  }, [adminUser]);
 
   const handleLogout = async () => {
     await signOut(auth);
-    useAuthStore.getState().clear();
+    setAdminUser(null);
+    setAdminToken(null);
     navigate('/', { replace: true });
   };
 
   const handleLogin = async () => {
     setLoginBusy(true);
+    setLoginError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      setUser(result.user);
-      const token = extractOAuthToken(result);
+      const token  = extractOAuthToken(result);
+
       if (import.meta.env.DEV) {
-        console.info('[admin] oauthToken extracted:', token ? token.slice(0, 12) + '\u2026' : 'NULL');
+        console.info('[admin] signInWithPopup result:', result);
+        console.info('[admin] oauthToken:', token ? token.slice(0, 16) + '…' : 'NULL ← problem!');
       }
-      setOauthToken(token);
+
+      if (!token) {
+        setLoginError(
+          'Google did not return an OAuth token. ' +
+          'Make sure the Google Sheets API is enabled in Google Cloud Console ' +
+          'and the Sheets scope is added to your OAuth consent screen.'
+        );
+        await signOut(auth);
+        return;
+      }
+
+      setAdminUser(result.user);
+      setAdminToken(token);
     } catch (e) {
-      console.error(e);
-      alert('Sign-in failed. Try again.');
-    } finally { setLoginBusy(false); }
+      console.error('[admin] login error:', e);
+      setLoginError(e.message || 'Sign-in failed. Try again.');
+    } finally {
+      setLoginBusy(false);
+    }
   };
 
-  if (!user) return <LoginPage onLogin={handleLogin} busy={loginBusy} />;
+  if (!adminUser || !adminToken) {
+    return <LoginPage onLogin={handleLogin} busy={loginBusy} error={loginError} />;
+  }
 
   const total     = stations.length;
   const available = stations.filter(s => s.status?.toLowerCase() === 'available').length;
@@ -249,7 +289,7 @@ export default function AdminDashboard() {
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
             <div>
               <h1 className="adm-title">STATION CONTROL</h1>
-              <p className="adm-sub">Live Google Sheets sync • {user.email}</p>
+              <p className="adm-sub">Live Google Sheets sync • {adminUser.email}</p>
             </div>
           </div>
           <div className="adm-hdr-r">
@@ -275,13 +315,6 @@ export default function AdminDashboard() {
           <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {!oauthToken && (
-          <div className="adm-warn">
-            <AlertTriangle size={13} />
-            <span>OAuth token missing — sign out and sign in again to enable write access</span>
-          </div>
-        )}
-
         {isLoading && (
           <div className="adm-skeletons">
             {[...Array(6)].map((_, i) => (
@@ -305,14 +338,14 @@ export default function AdminDashboard() {
               <table className="tbl">
                 <thead>
                   <tr className="tbl-head">
-                    {['#', 'Status', 'Current Game', 'Booked Slots', 'Preferred Game', ''].map(h => (
-                      <th key={h} className="tbl-th">{h}</th>
+                    {['#', 'Status', 'Current Game', 'Booked Slots', 'Preferred Game', ''].map((h, i) => (
+                      <th key={i} className="tbl-th">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {stations.map((s, i) => (
-                    <StationRow key={s.id ?? i} station={s} index={i} oauthToken={oauthToken} />
+                    <StationRow key={`station-${i}`} station={s} index={i} oauthToken={adminToken} />
                   ))}
                 </tbody>
               </table>
