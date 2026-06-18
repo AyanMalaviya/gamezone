@@ -62,6 +62,12 @@ export const getStations = async () => {
  * Requires an OAuth2 access token (from Google Sign-In).
  * The API key alone cannot authorise write operations.
  *
+ * Common errors:
+ *  - 403 PERMISSION_DENIED        → Sheets API not enabled in Google Cloud Console, OR
+ *                                    the OAuth client does not have the Sheets scope approved
+ *  - 403 insufficientPermissions  → oauthToken was issued without spreadsheets scope
+ *  - 401 Invalid Credentials      → token expired; sign out and sign in again
+ *
  * @param {number} rowIndex   0-based index into the DATA rows (after header)
  * @param {object} data       Station fields to write
  * @param {string} oauthToken Google OAuth2 access token from Firebase SignIn result
@@ -69,9 +75,13 @@ export const getStations = async () => {
 export const updateStation = async (rowIndex, data, oauthToken) => {
   if (!oauthToken) {
     throw new Error(
-      'An OAuth access token is required to write to Google Sheets. ' +
-      'Please sign out and sign in again.'
+      'No OAuth token found. Please sign out and sign in again to grant Sheets write access.'
     );
+  }
+
+  // Dev-only: log token prefix to confirm it exists and looks valid
+  if (import.meta.env.DEV) {
+    console.info('[sheets] oauthToken prefix:', oauthToken.slice(0, 12) + '…');
   }
 
   const { sheetId } = getSheetsEnv();
@@ -106,11 +116,32 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
   );
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(
-      err?.error?.message ??
-      `Google Sheets write failed (HTTP ${res.status})`
-    );
+    const errBody = await res.json().catch(() => ({}));
+    const message = errBody?.error?.message ?? `HTTP ${res.status}`;
+    const status  = errBody?.error?.status  ?? '';
+
+    // Surface actionable guidance for the most common failures
+    if (res.status === 403) {
+      if (status === 'PERMISSION_DENIED' || message.includes('disabled')) {
+        throw new Error(
+          `Google Sheets API is not enabled for this project. ` +
+          `Go to console.cloud.google.com → APIs & Services → Enable "Google Sheets API". ` +
+          `(${message})`
+        );
+      }
+      throw new Error(
+        `Insufficient permissions (403). The OAuth token may be missing the spreadsheets scope. ` +
+        `Sign out and sign in again to re-grant access. (${message})`
+      );
+    }
+
+    if (res.status === 401) {
+      throw new Error(
+        `OAuth token expired or invalid (401). Please sign out and sign in again. (${message})`
+      );
+    }
+
+    throw new Error(`Google Sheets write failed: ${message}`);
   }
 
   return res.json();
