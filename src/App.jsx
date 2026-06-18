@@ -7,13 +7,15 @@ import AdminDashboard from './pages/AdminDashboard';
 import LandingPage from './pages/LandingPage';
 import GoogleProfileGate from './components/GoogleProfileGate';
 
+// ProtectedRoute: only checks auth + role.
+// Slug is generated BEFORE navigation (in Navbar), so it is always set by the time
+// AdminDashboard mounts. No slug check needed here — AdminDashboard itself owns the
+// TTL countdown and self-destructs when the slug expires.
 function ProtectedRoute({ children }) {
-  const { user, role, loading, adminSlug, slugExpiry } = useAuthStore();
+  const { user, role, loading } = useAuthStore();
   if (loading) return null;
-  if (!user)           return <Navigate to="/auth/login" replace />;
+  if (!user)            return <Navigate to="/auth/login" replace />;
   if (role !== 'admin') return <Navigate to="/" replace />;
-  // Slug expired → bounce back home (admin must re-navigate to re-generate)
-  if (!adminSlug || Date.now() > slugExpiry) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -44,7 +46,7 @@ export default function App() {
         <Route path="/stations" element={<StationLayout />} />
         <Route path="/auth/:mode" element={<AuthPage />} />
 
-        {/* Dynamic slug route — only registered when a slug exists in the store */}
+        {/* Dynamic slug route — registered once admin navigates via Navbar */}
         {adminSlug && (
           <Route
             path={`/${adminSlug}`}

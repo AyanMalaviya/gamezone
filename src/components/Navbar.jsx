@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import { createSlugSession } from '../lib/adminSlug';
 
 const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
@@ -35,12 +36,10 @@ export default function Navbar() {
   const [mobileOpen, setMobile] = useState(false);
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { user, role, adminSlug, slugExpiry, logout } = useAuthStore();
+  const { user, role, adminSlug, slugExpiry, setAdminSlug, logout } = useAuthStore();
 
   const isAdmin   = role === 'admin';
-  // Only show dashboard link if slug is alive
   const slugAlive = adminSlug && slugExpiry && Date.now() < slugExpiry;
-  const adminPath = adminSlug ? `/${adminSlug}` : null;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -54,6 +53,24 @@ export default function Navbar() {
     href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
 
   const goAuth = (mode) => { navigate(`/auth/${mode}`); setMobile(false); };
+
+  // Called when admin clicks "Dashboard" button.
+  // Generates a fresh slug (or reuses alive one), stores it, then navigates.
+  const handleDashboardClick = (e) => {
+    e.preventDefault();
+    setMobile(false);
+    if (slugAlive) {
+      // Slug still valid — just navigate to it
+      navigate(`/${adminSlug}`);
+    } else {
+      // Generate a brand-new slug session
+      const { slug, expiry } = createSlugSession();
+      setAdminSlug(slug, expiry);
+      // React Router registers the route on next render; use setTimeout to let
+      // the store update propagate before navigating.
+      setTimeout(() => navigate(`/${slug}`), 0);
+    }
+  };
 
   return (
     <>
@@ -87,17 +104,20 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* Admin dashboard link — only when admin AND slug is alive */}
-            {isAdmin && slugAlive && adminPath && (
-              <Link
-                to={adminPath}
-                className={`navbar-link navbar-link-admin${isActive(adminPath) ? ' navbar-link-active' : ''}`}
+            {/* Admin dashboard button — visible to any admin user, slug generated on click */}
+            {isAdmin && (
+              <a
+                href="#"
+                onClick={handleDashboardClick}
+                className={`navbar-link navbar-link-admin${
+                  slugAlive && adminSlug && isActive(`/${adminSlug}`) ? ' navbar-link-active' : ''
+                }`}
                 title="Admin Dashboard"
               >
                 <LayoutDashboard size={14} style={{ display:'inline', marginRight:5, verticalAlign:'middle' }} />
                 Dashboard
                 <span className="navbar-link-bar" />
-              </Link>
+              </a>
             )}
           </nav>
 
@@ -171,15 +191,15 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {isAdmin && slugAlive && adminPath && (
-            <Link
-              to={adminPath}
-              className={`mobile-nav-link mobile-nav-admin${isActive(adminPath) ? ' mobile-nav-active' : ''}`}
-              onClick={() => setMobile(false)}
+          {isAdmin && (
+            <a
+              href="#"
+              onClick={handleDashboardClick}
+              className="mobile-nav-link mobile-nav-admin"
             >
               <LayoutDashboard size={14} style={{ display:'inline', marginRight:6, verticalAlign:'middle' }} />
               Dashboard
-            </Link>
+            </a>
           )}
 
           <div className="mobile-auth-row">
