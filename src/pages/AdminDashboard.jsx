@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck,
   Gamepad2, Zap, Clock, Star,
-  RefreshCw, CheckCircle2, AlertTriangle,
+  RefreshCw, CheckCircle2, AlertTriangle, Timer,
 } from 'lucide-react';
 import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
 import { auth, googleProvider } from '../lib/firebase';
+import { createSlugSession, TTL_MINUTES } from '../lib/adminSlug';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
@@ -22,7 +24,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* ── Neon background (orbs + scanlines + grid) ────────────────────────────── */
+/* ── Neon background ──────────────────────────────────────────────────────── */
 const NeonBg = () => (
   <div className="adm-bg" aria-hidden="true">
     <div className="adm-orb adm-orb-1" />
@@ -63,6 +65,42 @@ const StatCard = ({ label, value, Icon, glow }) => {
   );
 };
 
+/* ── TTL countdown badge ──────────────────────────────────────────────────── */
+const TtlBadge = ({ expiry, onExpired }) => {
+  const [remaining, setRemaining] = useState(() => Math.max(0, expiry - Date.now()));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const left = Math.max(0, expiry - Date.now());
+      setRemaining(left);
+      if (left === 0) { clearInterval(id); onExpired(); }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [expiry, onExpired]);
+
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  const label = `${mins}:${String(secs).padStart(2, '0')}`;
+  const pct   = remaining / (TTL_MINUTES * 60000);
+  const urgent = pct < 0.2;
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 7,
+      padding: '5px 12px', borderRadius: 8,
+      background: urgent ? 'rgba(239,68,68,0.12)' : 'rgba(168,85,247,0.10)',
+      border: `1px solid ${urgent ? 'rgba(239,68,68,0.35)' : 'rgba(168,85,247,0.3)'}`,
+      fontSize: '0.8rem', fontWeight: 700,
+      color: urgent ? '#fca5a5' : '#c4b5fd',
+      fontVariantNumeric: 'tabular-nums',
+      transition: 'all 0.5s ease',
+    }}>
+      <Timer size={13} style={{ flexShrink: 0 }} />
+      Session expires in {label}
+    </div>
+  );
+};
+
 /* ── Login page ───────────────────────────────────────────────────────────── */
 const LoginPage = ({ onLogin, busy }) => (
   <div className="adm-login-wrap">
@@ -74,21 +112,15 @@ const LoginPage = ({ onLogin, busy }) => (
         <span className="lc-edge lc-right"  />
         <span className="lc-edge lc-bottom" />
         <span className="lc-edge lc-left"   />
-
-        <div className="login-shield">
-          <ShieldCheck size={34} />
-        </div>
+        <div className="login-shield"><ShieldCheck size={34} /></div>
         <h1 className="login-title">ADMIN ACCESS</h1>
         <p className="login-sub">Restricted zone — authenticate to proceed</p>
-
         <div className="login-divider"><span>GOOGLE AUTH</span></div>
-
         <button onClick={onLogin} disabled={busy} className="login-btn">
           {busy ? <Loader2 size={18} className="adm-spin" /> : <GoogleIcon />}
           <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
           <div className="login-shine" />
         </button>
-
         <p className="login-note">Only authorised admins can access this panel</p>
       </div>
     </div>
@@ -105,7 +137,7 @@ const StationRow = ({ station, index, oauthToken }) => {
                      : (station.bookedSlots || ''),
     preferredGame: station.preferredGame || '',
   });
-  const [form, setForm]   = useState(init);
+  const [form, setForm]     = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(false);
@@ -138,15 +170,12 @@ const StationRow = ({ station, index, oauthToken }) => {
 
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
-      {/* ID */}
       <td className="td-id">
         <div className="id-badge">
           <span>{String(station.id).padStart(2, '0')}</span>
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
-
-      {/* Status */}
       <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
           className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
@@ -154,23 +183,15 @@ const StationRow = ({ station, index, oauthToken }) => {
           <option value="occupied">● Occupied</option>
         </select>
       </td>
-
-      {/* Current game */}
       <td className="td-i"><input type="text" name="currentGame"
         value={form.currentGame} onChange={onChange}
         placeholder="e.g. FIFA 25" className="ni" /></td>
-
-      {/* Booked slots */}
       <td className="td-i td-w"><input type="text" name="bookedSlots"
         value={form.bookedSlots} onChange={onChange}
         placeholder="10:00-11:00, 13:00-14:00" className="ni" /></td>
-
-      {/* Preferred game */}
       <td className="td-i"><input type="text" name="preferredGame"
         value={form.preferredGame} onChange={onChange}
         placeholder="Preferred game" className="ni" /></td>
-
-      {/* Save */}
       <td className="td-sv">
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
@@ -185,17 +206,35 @@ const StationRow = ({ station, index, oauthToken }) => {
   );
 };
 
-/* ── Main Dashboard ───────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════
+   Main Dashboard
+   - Generates a fresh random slug on mount via createSlugSession()
+   - Registers it in authStore so App.jsx dynamic route picks it up
+   - Counts down 10 min; on expiry OR logout → clears slug → route vanishes
+══════════════════════════════════════════════════════════════════════════════ */
 export default function AdminDashboard() {
   const user          = useAuthStore(s => s.user);
   const setUser       = useAuthStore(s => s.setUser);
   const oauthToken    = useAuthStore(s => s.oauthToken);
   const setOauthToken = useAuthStore(s => s.setOauthToken);
+  const setAdminSlug  = useAuthStore(s => s.setAdminSlug);
+  const clearAdminSlug = useAuthStore(s => s.clearAdminSlug);
+  const slugExpiry    = useAuthStore(s => s.slugExpiry);
+
   const [loginBusy, setLoginBusy] = useState(false);
   const { stations, isLoading, isError, refetch } = useStationData();
+  const navigate = useNavigate();
+  const zapRef   = useRef(null);
 
-  /* disco hue-rotate on the ⚡ icon */
-  const zapRef = useRef(null);
+  /* ── Generate slug once on mount ──────────────────────────────────────── */
+  useEffect(() => {
+    const { slug, expiry } = createSlugSession();
+    setAdminSlug(slug, expiry);
+    // Cleanup: destroy slug when component unmounts
+    return () => clearAdminSlug();
+  }, []); // eslint-disable-line
+
+  /* ── Disco hue on ⚡ ───────────────────────────────────────────────────── */
   useEffect(() => {
     if (!zapRef.current) return;
     let h = 0;
@@ -205,6 +244,20 @@ export default function AdminDashboard() {
     }, 20);
     return () => clearInterval(id);
   }, [user]);
+
+  /* ── Called when TTL hits zero ─────────────────────────────────────────── */
+  const handleExpired = useCallback(() => {
+    clearAdminSlug();
+    navigate('/', { replace: true });
+  }, [clearAdminSlug, navigate]);
+
+  /* ── Logout: destroy slug + sign out ──────────────────────────────────── */
+  const handleLogout = async () => {
+    clearAdminSlug();                  // Destroy slug immediately
+    await signOut(auth);
+    useAuthStore.getState().clear();   // Wipes user/role/token too
+    navigate('/', { replace: true });
+  };
 
   const handleLogin = async () => {
     setLoginBusy(true);
@@ -217,11 +270,6 @@ export default function AdminDashboard() {
       console.error(e);
       alert('Sign-in failed. Try again.');
     } finally { setLoginBusy(false); }
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    useAuthStore.getState().clear();
   };
 
   if (!user) return <LoginPage onLogin={handleLogin} busy={loginBusy} />;
@@ -244,10 +292,14 @@ export default function AdminDashboard() {
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
             <div>
               <h1 className="adm-title">STATION CONTROL</h1>
-              <p className="adm-sub">Live Google Sheets sync • {user.email}</p>
+              <p className="adm-sub">Live Google Sheets sync • {user.email}</p>
             </div>
           </div>
-          <div className="adm-hdr-r">
+          <div className="adm-hdr-r" style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {/* TTL countdown — only renders once slugExpiry is set */}
+            {slugExpiry && (
+              <TtlBadge expiry={slugExpiry} onExpired={handleExpired} />
+            )}
             <button onClick={() => refetch()} className="adm-btn adm-btn-refresh">
               <RefreshCw size={14} /><span>Refresh</span>
             </button>
@@ -264,7 +316,7 @@ export default function AdminDashboard() {
           <div className="adm-div-line" />
         </div>
 
-        {/* ── Stat cards ───────────────────────────────────────── */}
+        {/* ── Stat cards ─────────────────────────────────────── */}
         <div className="sc-grid">
           <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
           <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
@@ -272,7 +324,7 @@ export default function AdminDashboard() {
           <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* ── OAuth warning ────────────────────────────────────── */}
+        {/* ── OAuth warning ──────────────────────────────────── */}
         {!oauthToken && (
           <div className="adm-warn">
             <Zap size={13} />
@@ -289,7 +341,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Error ──────────────────────────────────────────────── */}
+        {/* ── Error ──────────────────────────────────────────── */}
         {isError && (
           <div className="adm-error">
             <AlertTriangle size={32} />
@@ -298,7 +350,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Table ──────────────────────────────────────────────── */}
+        {/* ── Table ──────────────────────────────────────────── */}
         {!isLoading && !isError && (
           <div className="tbl-wrap">
             <div className="tbl-neon tbl-neon-top" />

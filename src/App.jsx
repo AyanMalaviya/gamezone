@@ -8,16 +8,18 @@ import LandingPage from './pages/LandingPage';
 import GoogleProfileGate from './components/GoogleProfileGate';
 
 function ProtectedRoute({ children }) {
-  const { user, role, loading } = useAuthStore();
+  const { user, role, loading, adminSlug, slugExpiry } = useAuthStore();
   if (loading) return null;
-  if (!user) return <Navigate to="/auth/login" replace />;
+  if (!user)           return <Navigate to="/auth/login" replace />;
   if (role !== 'admin') return <Navigate to="/" replace />;
+  // Slug expired → bounce back home (admin must re-navigate to re-generate)
+  if (!adminSlug || Date.now() > slugExpiry) return <Navigate to="/" replace />;
   return children;
 }
 
 export default function App() {
   useAuthListener();
-  const { loading } = useAuthStore();
+  const { loading, adminSlug } = useAuthStore();
 
   if (loading) return (
     <div style={{
@@ -36,20 +38,24 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {/* Auto-prompt Google users to add phone number */}
       <GoogleProfileGate />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/stations" element={<StationLayout />} />
         <Route path="/auth/:mode" element={<AuthPage />} />
-        <Route
-          path={`/${import.meta.env.VITE_ADMIN_SLUG ?? 'admin'}`}
-          element={
-            <ProtectedRoute>
-              <AdminDashboard />
-            </ProtectedRoute>
-          }
-        />
+
+        {/* Dynamic slug route — only registered when a slug exists in the store */}
+        {adminSlug && (
+          <Route
+            path={`/${adminSlug}`}
+            element={
+              <ProtectedRoute>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+        )}
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

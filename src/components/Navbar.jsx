@@ -35,11 +35,12 @@ export default function Navbar() {
   const [mobileOpen, setMobile] = useState(false);
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { user, role, logout } = useAuthStore();
+  const { user, role, adminSlug, slugExpiry, logout } = useAuthStore();
 
-  const isAdmin    = role === 'admin';
-  const adminSlug  = import.meta.env.VITE_ADMIN_SLUG ?? 'admin';
-  const adminPath  = `/${adminSlug}`;
+  const isAdmin   = role === 'admin';
+  // Only show dashboard link if slug is alive
+  const slugAlive = adminSlug && slugExpiry && Date.now() < slugExpiry;
+  const adminPath = adminSlug ? `/${adminSlug}` : null;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -86,8 +87,8 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* Admin dashboard link — only visible when role === 'admin' */}
-            {isAdmin && (
+            {/* Admin dashboard link — only when admin AND slug is alive */}
+            {isAdmin && slugAlive && adminPath && (
               <Link
                 to={adminPath}
                 className={`navbar-link navbar-link-admin${isActive(adminPath) ? ' navbar-link-active' : ''}`}
@@ -170,8 +171,7 @@ export default function Navbar() {
             </Link>
           ))}
 
-          {/* Admin link in mobile drawer */}
-          {isAdmin && (
+          {isAdmin && slugAlive && adminPath && (
             <Link
               to={adminPath}
               className={`mobile-nav-link mobile-nav-admin${isActive(adminPath) ? ' mobile-nav-active' : ''}`}
