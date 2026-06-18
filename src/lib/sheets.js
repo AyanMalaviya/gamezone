@@ -1,20 +1,13 @@
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
-const STATION_COLUMNS = 'A:E';
+const STATION_COLUMNS = 'A:F';
 
 let sheetTitlePromise;
 
 const getSheetsEnv = () => {
   const sheetId = import.meta.env.VITE_SHEETS_ID;
-  const apiKey = import.meta.env.VITE_SHEETS_API_KEY;
-
-  if (!sheetId) {
-    throw new Error('VITE_SHEETS_ID is not set.');
-  }
-
-  if (!apiKey) {
-    throw new Error('VITE_SHEETS_API_KEY is not set.');
-  }
-
+  const apiKey  = import.meta.env.VITE_SHEETS_API_KEY;
+  if (!sheetId) throw new Error('VITE_SHEETS_ID is not set.');
+  if (!apiKey)  throw new Error('VITE_SHEETS_API_KEY is not set.');
   return { apiKey, sheetId };
 };
 
@@ -22,104 +15,103 @@ const getSheetTitle = async () => {
   if (!sheetTitlePromise) {
     sheetTitlePromise = (async () => {
       const { apiKey, sheetId } = getSheetsEnv();
-      const response = await fetch(
-        `${SHEETS_BASE_URL}/${sheetId}?key=${apiKey}&fields=sheets(properties(title))`,
+      const res = await fetch(
+        `${SHEETS_BASE_URL}/${sheetId}?key=${apiKey}&fields=sheets(properties(title))`
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to load Google Sheets metadata.');
-      }
-
-      const data = await response.json();
+      if (!res.ok) throw new Error('Failed to load Google Sheets metadata.');
+      const data  = await res.json();
       const title = data?.sheets?.[0]?.properties?.title;
-
-      if (!title) {
-        throw new Error('Google Sheets spreadsheet does not contain any tabs.');
-      }
-
+      if (!title) throw new Error('Spreadsheet has no tabs.');
       return title;
     })();
   }
-
   return sheetTitlePromise;
 };
 
-const parseBookedSlots = (value) => {
-  if (!value) {
-    return [];
-  }
-
-  return String(value)
-    .split(',')
-    .map((slot) => slot.trim())
-    .filter(Boolean);
-};
+const parseBookedSlots = (value) =>
+  value ? String(value).split(',').map(s => s.trim()).filter(Boolean) : [];
 
 const mapStationRow = (row = []) => ({
-  bookedSlots: parseBookedSlots(row[3]),
-  currentGame: row[2] ?? '',
-  id: row[0] ?? '',
+  id:            row[0] ?? '',
+  status:        row[1] ?? '',
+  currentGame:   row[2] ?? '',
+  bookedSlots:   parseBookedSlots(row[3]),
   preferredGame: row[4] ?? '',
-  status: row[1] ?? '',
+  stationType:   row[5] ?? '',
 });
 
-const serializeBookedSlots = (value) => {
-  if (Array.isArray(value)) {
-    return value.join(', ');
-  }
-
-  return value ?? '';
-};
+const serializeBookedSlots = (value) =>
+  Array.isArray(value) ? value.join(', ') : (value ?? '');
 
 export const getStations = async () => {
   const { apiKey, sheetId } = getSheetsEnv();
   const sheetTitle = await getSheetTitle();
-
-  const response = await fetch(
-    `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(sheetTitle)}!${STATION_COLUMNS}?key=${apiKey}`,
+  const res = await fetch(
+    `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(sheetTitle)}!${STATION_COLUMNS}?key=${apiKey}`
   );
-
-  if (!response.ok) {
-    throw new Error('Failed to load stations from Google Sheets.');
-  }
-
-  const data = await response.json();
+  if (!res.ok) throw new Error('Failed to load stations from Google Sheets.');
+  const data = await res.json();
   const rows = data?.values ?? [];
-
-  return rows.map(mapStationRow);
+  // skip header row
+  return rows.slice(1).map(mapStationRow);
 };
 
-export const updateStation = async (rowIndex, data) => {
-  const { apiKey, sheetId } = getSheetsEnv();
-  const sheetTitle = await getSheetTitle();
-  const sheetRowNumber = Number(rowIndex) + 2;
+/**
+ * updateStation — writes a row back to Google Sheets.
+ *
+ * Requires an OAuth2 access token (from Google Sign-In).
+ * The API key alone cannot authorise write operations.
+ *
+ * @param {number} rowIndex   0-based index into the DATA rows (after header)
+ * @param {object} data       Station fields to write
+ * @param {string} oauthToken Google OAuth2 access token from Firebase SignIn result
+ */
+export const updateStation = async (rowIndex, data, oauthToken) => {
+  if (!oauthToken) {
+    throw new Error(
+      'An OAuth access token is required to write to Google Sheets. ' +
+      'Please sign out and sign in again.'
+    );
+  }
 
-  if (!Number.isInteger(sheetRowNumber) || sheetRowNumber < 2) {
+  const { sheetId } = getSheetsEnv();
+  const sheetTitle  = await getSheetTitle();
+  // +2 because row 1 is the header and Sheets is 1-indexed
+  const sheetRow    = Number(rowIndex) + 2;
+
+  if (!Number.isInteger(sheetRow) || sheetRow < 2) {
     throw new Error('rowIndex must be a valid zero-based data row index.');
   }
 
+  const range  = `${sheetTitle}!A${sheetRow}:F${sheetRow}`;
   const values = [[
-    data?.id ?? '',
-    data?.status ?? '',
-    data?.currentGame ?? '',
+    data?.id            ?? '',
+    data?.status        ?? '',
+    data?.currentGame   ?? '',
     serializeBookedSlots(data?.bookedSlots),
     data?.preferredGame ?? '',
+    data?.stationType   ?? '',
   ]];
 
-  const response = await fetch(
-    `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(sheetTitle)}!A${sheetRowNumber}:E${sheetRowNumber}?valueInputOption=RAW&key=${apiKey}`,
+  const res = await fetch(
+    `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
     {
-      body: JSON.stringify({ majorDimension: 'ROWS', range: `${sheetTitle}!A${sheetRowNumber}:E${sheetRowNumber}`, values }),
+      method:  'PUT',
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${oauthToken}`,
+        'Content-Type':  'application/json',
       },
-      method: 'PUT',
-    },
+      body: JSON.stringify({ majorDimension: 'ROWS', range, values }),
+    }
   );
 
-  if (!response.ok) {
-    throw new Error('Failed to update station in Google Sheets.');
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(
+      err?.error?.message ??
+      `Google Sheets write failed (HTTP ${res.status})`
+    );
   }
 
-  return response.json();
+  return res.json();
 };
