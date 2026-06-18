@@ -5,12 +5,12 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  GoogleAuthProvider,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 import useAuthStore from '../store/authStore';
 
-// Fetch role from Firestore users/{uid} document
 async function fetchRole(uid) {
   try {
     const snap = await getDoc(doc(db, 'users', uid));
@@ -20,6 +20,9 @@ async function fetchRole(uid) {
   }
 }
 
+// Listens to Firebase auth state changes and syncs to Zustand store.
+// NOTE: onAuthStateChanged does NOT give us the OAuth token on refresh,
+// so oauthToken is only available for the current session after signIn.
 export function useAuthListener() {
   const { setUser, setRole, setLoading } = useAuthStore();
 
@@ -32,6 +35,7 @@ export function useAuthListener() {
       } else {
         setUser(null);
         setRole(null);
+        useAuthStore.getState().setOauthToken(null);
       }
       setLoading(false);
     });
@@ -48,7 +52,6 @@ export async function loginWithEmail(email, password) {
 
 export async function registerWithEmail(email, password) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
-  // Create user doc with default role null
   await setDoc(doc(db, 'users', cred.user.uid), {
     email: cred.user.email,
     role: null,
@@ -58,16 +61,27 @@ export async function registerWithEmail(email, password) {
 }
 
 export async function loginWithGoogle() {
-  const cred = await signInWithPopup(auth, googleProvider);
-  // Upsert user doc (don't overwrite role if it already exists)
-  const ref  = doc(db, 'users', cred.user.uid);
+  const result = await signInWithPopup(auth, googleProvider);
+
+  // Extract OAuth access token and persist in store
+  const credential  = GoogleAuthProvider.credentialFromResult(result);
+  const oauthToken  = credential?.accessToken ?? null;
+  useAuthStore.getState().setOauthToken(oauthToken);
+
+  // Upsert Firestore user doc
+  const ref  = doc(db, 'users', result.user.uid);
   const snap = await getDoc(ref);
   if (!snap.exists()) {
-    await setDoc(ref, { email: cred.user.email, role: null, createdAt: new Date().toISOString() });
+    await setDoc(ref, {
+      email:     result.user.email,
+      role:      null,
+      createdAt: new Date().toISOString(),
+    });
   }
   const role = snap.exists() ? (snap.data().role ?? null) : null;
   useAuthStore.getState().setRole(role);
-  return cred.user;
+
+  return result.user;
 }
 
 export async function logout() {

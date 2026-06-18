@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useRef, useEffect } from 'react';
+import {
+  LogOut, Save, Loader2, ShieldCheck, Gamepad2,
+  Zap, Clock, Star, RefreshCw, CheckCircle2, AlertTriangle,
+} from 'lucide-react';
+import { useState } from 'react';
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
-import { auth, googleProvider, signInWithPopup, signOut } from '../lib/firebase';
+import { loginWithGoogle, logout } from '../hooks/useAuth';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
@@ -17,7 +21,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// ── Animated neon orb background ─────────────────────────────────────────────
+// ── Animated neon background ─────────────────────────────────────────────
 const NeonBackground = () => (
   <div className="admin-bg" aria-hidden="true">
     <div className="admin-orb admin-orb-1" />
@@ -28,20 +32,19 @@ const NeonBackground = () => (
   </div>
 );
 
-// ── Stat card with neon glow ──────────────────────────────────────────────────
-const StatCard = ({ label, value, icon: Icon, color, glow }) => {
+// ── Count-up stat card ────────────────────────────────────────────────
+const StatCard = ({ label, value, icon: Icon, glow }) => {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
-    let start = 0;
     const target = Number(value) || 0;
-    if (target === 0) { setDisplay(0); return; }
-    const step = Math.ceil(target / 20);
-    const timer = setInterval(() => {
-      start += step;
-      if (start >= target) { setDisplay(target); clearInterval(timer); }
-      else setDisplay(start);
+    let n = 0;
+    const step = Math.max(1, Math.ceil(target / 20));
+    const id = setInterval(() => {
+      n = Math.min(n + step, target);
+      setDisplay(n);
+      if (n >= target) clearInterval(id);
     }, 40);
-    return () => clearInterval(timer);
+    return () => clearInterval(id);
   }, [value]);
 
   return (
@@ -52,7 +55,7 @@ const StatCard = ({ label, value, icon: Icon, color, glow }) => {
         </div>
         <div>
           <p className="stat-label">{label}</p>
-          <p className="stat-value" style={{ color: glow }}>{display}</p>
+          <p className="stat-value" style={{ color: glow }}>{display}{label === 'Utilisation' ? '%' : ''}</p>
         </div>
       </div>
       <div className="stat-bar" style={{ background: `linear-gradient(90deg, ${glow}88, transparent)` }} />
@@ -60,49 +63,69 @@ const StatCard = ({ label, value, icon: Icon, color, glow }) => {
   );
 };
 
-// ── Login page ────────────────────────────────────────────────────────────────
-const LoginPage = ({ onLogin, loading }) => (
-  <div className="admin-login-wrap">
-    <NeonBackground />
-    <Navbar />
-    <div className="login-center">
-      <div className="login-card">
-        {/* Animated border */}
-        <div className="login-border-top" />
-        <div className="login-border-right" />
-        <div className="login-border-bottom" />
-        <div className="login-border-left" />
+// ── Login gate ────────────────────────────────────────────────────────────
+const LoginGate = () => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-        <div className="login-shield">
-          <ShieldCheck size={32} />
+  const handleGoogle = async () => {
+    setBusy(true); setError('');
+    try {
+      await loginWithGoogle();
+      // useAuthStore is updated inside loginWithGoogle —
+      // ProtectedRoute will re-render and show <Outlet /> automatically
+    } catch (e) {
+      setError(e?.code === 'auth/popup-closed-by-user'
+        ? 'Sign-in cancelled.'
+        : 'Sign-in failed. Please try again.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="admin-login-wrap">
+      <NeonBackground />
+      <Navbar />
+      <div className="login-center">
+        <div className="login-card">
+          <div className="login-border-top" />
+          <div className="login-border-right" />
+          <div className="login-border-bottom" />
+          <div className="login-border-left" />
+
+          <div className="login-shield"><ShieldCheck size={32} /></div>
+          <h1 className="login-title">ADMIN ACCESS</h1>
+          <p className="login-sub">Restricted zone — authenticate to proceed</p>
+
+          <div className="login-divider"><span>GOOGLE AUTH</span></div>
+
+          <button onClick={handleGoogle} disabled={busy} className="login-btn">
+            {busy ? <Loader2 size={18} className="spin" /> : <GoogleIcon />}
+            <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
+            <div className="login-btn-shine" />
+          </button>
+
+          {error && (
+            <div className="login-error">
+              <AlertTriangle size={14} />
+              <span>{error}</span>
+            </div>
+          )}
+          <p className="login-note">Only authorized admins can access this panel</p>
         </div>
-        <h1 className="login-title">ADMIN ACCESS</h1>
-        <p className="login-sub">Restricted zone — authenticate to proceed</p>
-
-        <div className="login-divider">
-          <span>GOOGLE AUTH</span>
-        </div>
-
-        <button onClick={onLogin} disabled={loading} className="login-btn">
-          {loading
-            ? <Loader2 size={18} className="spin" />
-            : <GoogleIcon />}
-          <span>{loading ? 'Authenticating…' : 'Sign in with Google'}</span>
-          <div className="login-btn-shine" />
-        </button>
-
-        <p className="login-note">Only authorized admins can access this panel</p>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-// ── Station row editor ────────────────────────────────────────────────────────
-const StationRow = ({ station, index, oauthToken }) => {
+// ── Station table row ───────────────────────────────────────────────────
+const StationRow = ({ station, index }) => {
+  const oauthToken = useAuthStore(s => s.oauthToken);
   const [form, setForm] = useState({
     status:        station.status        || 'available',
     currentGame:   station.currentGame   || '',
-    bookedSlots:   Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : (station.bookedSlots || ''),
+    bookedSlots:   Array.isArray(station.bookedSlots)
+      ? station.bookedSlots.join(', ')
+      : (station.bookedSlots || ''),
     preferredGame: station.preferredGame || '',
   });
   const [saving, setSaving] = useState(false);
@@ -113,12 +136,14 @@ const StationRow = ({ station, index, oauthToken }) => {
     setForm({
       status:        station.status        || 'available',
       currentGame:   station.currentGame   || '',
-      bookedSlots:   Array.isArray(station.bookedSlots) ? station.bookedSlots.join(', ') : (station.bookedSlots || ''),
+      bookedSlots:   Array.isArray(station.bookedSlots)
+        ? station.bookedSlots.join(', ')
+        : (station.bookedSlots || ''),
       preferredGame: station.preferredGame || '',
     });
   }, [station]);
 
-  const onChange = (e) => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+  const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
   const onSave = async () => {
     setSaving(true); setErr(false);
@@ -129,10 +154,12 @@ const StationRow = ({ station, index, oauthToken }) => {
         currentGame:   form.currentGame,
         bookedSlots:   form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
         preferredGame: form.preferredGame,
+        stationType:   station.stationType || '',
       }, oauthToken);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
-    } catch {
+    } catch (e) {
+      console.error(e);
       setErr(true);
       setTimeout(() => setErr(false), 3000);
     } finally { setSaving(false); }
@@ -142,15 +169,12 @@ const StationRow = ({ station, index, oauthToken }) => {
 
   return (
     <tr className={`station-row ${occupied ? 'occupied' : 'available'}`}>
-      {/* ID badge */}
       <td className="td-id">
         <div className="id-badge">
           <span>{String(station.id).padStart(2, '0')}</span>
           <div className={`id-dot ${occupied ? 'dot-red' : 'dot-green'}`} />
         </div>
       </td>
-
-      {/* Status select */}
       <td className="td-status">
         <select name="status" value={form.status} onChange={onChange}
           className={`status-select ${occupied ? 'sel-occupied' : 'sel-available'}`}>
@@ -158,33 +182,26 @@ const StationRow = ({ station, index, oauthToken }) => {
           <option value="occupied">● Occupied</option>
         </select>
       </td>
-
-      {/* Current game */}
       <td className="td-input">
         <input type="text" name="currentGame" value={form.currentGame}
           onChange={onChange} placeholder="e.g. FIFA 25" className="neon-input" />
       </td>
-
-      {/* Booked slots */}
       <td className="td-input td-wide">
         <input type="text" name="bookedSlots" value={form.bookedSlots}
           onChange={onChange} placeholder="10:00-11:00, 13:00-14:00" className="neon-input" />
       </td>
-
-      {/* Preferred game */}
       <td className="td-input">
         <input type="text" name="preferredGame" value={form.preferredGame}
           onChange={onChange} placeholder="Preferred game" className="neon-input" />
       </td>
-
-      {/* Save */}
       <td className="td-save">
-        <button onClick={onSave} disabled={saving}
-          className={`save-btn ${saved ? 'save-ok' : err ? 'save-err' : ''}`}>
+        <button onClick={onSave} disabled={saving || !oauthToken}
+          className={`save-btn ${saved ? 'save-ok' : err ? 'save-err' : ''}`}
+          title={!oauthToken ? 'Re-login to enable writes' : ''}>
           <span className="save-btn-bg" />
           {saving ? <Loader2 size={14} className="spin" />
             : saved ? <CheckCircle2 size={14} />
-            : err ? <AlertTriangle size={14} />
+            : err   ? <AlertTriangle size={14} />
             : <Save size={14} />}
           <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
         </button>
@@ -193,59 +210,35 @@ const StationRow = ({ station, index, oauthToken }) => {
   );
 };
 
-// ── Main dashboard ────────────────────────────────────────────────────────────
-export default function AdminDashboard() {
+// ── Dashboard (shown after login) ─────────────────────────────────────────
+const DashboardView = () => {
   const user       = useAuthStore(s => s.user);
-  const setUser    = useAuthStore(s => s.setUser);
-  const [oauthToken, setOauthToken] = useState(null);
-  const [loginBusy, setLoginBusy]   = useState(false);
+  const oauthToken = useAuthStore(s => s.oauthToken);
   const { stations, isLoading, isError, refetch } = useStationData();
   const tickRef = useRef(null);
 
-  // Disco ticker animation
   useEffect(() => {
     if (!tickRef.current) return;
     let x = 0;
     const id = setInterval(() => {
       x = (x + 0.5) % 360;
-      if (tickRef.current)
-        tickRef.current.style.filter = `hue-rotate(${x}deg)`;
+      if (tickRef.current) tickRef.current.style.filter = `hue-rotate(${x}deg)`;
     }, 30);
     return () => clearInterval(id);
-  }, [user]);
-
-  const handleLogin = async () => {
-    setLoginBusy(true);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      setUser(result.user);
-      // Grab OAuth access token for Sheets write
-      const { GoogleAuthProvider } = await import('firebase/auth');
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      setOauthToken(credential?.accessToken || null);
-    } catch { alert('Sign-in failed. Try again.'); }
-    finally { setLoginBusy(false); }
-  };
-
-  const handleLogout = async () => {
-    await signOut(auth);
-    setUser(null);
-    setOauthToken(null);
-  };
-
-  if (!user) return <LoginPage onLogin={handleLogin} loading={loginBusy} />;
+  }, []);
 
   const total     = stations?.length ?? 0;
   const available = stations?.filter(s => s.status?.toLowerCase() === 'available').length ?? 0;
-  const occupied  = stations?.filter(s => s.status?.toLowerCase() === 'occupied').length ?? 0;
+  const occupied  = stations?.filter(s => s.status?.toLowerCase() === 'occupied').length  ?? 0;
+  const utilPct   = total ? Math.round(occupied / total * 100) : 0;
 
   return (
     <div className="admin-wrap">
       <NeonBackground />
       <Navbar />
-
       <div className="admin-body">
-        {/* ── Header ──────────────────────────────── */}
+
+        {/* Header */}
         <div className="admin-header">
           <div className="admin-header-left">
             <div className="admin-title-row">
@@ -254,47 +247,48 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <h1 className="admin-title">STATION CONTROL</h1>
-                <p className="admin-sub">Live Google Sheets sync • {user.email}</p>
+                <p className="admin-sub">Live Google Sheets sync • {user?.email}</p>
               </div>
             </div>
           </div>
           <div className="admin-header-right">
+            {!oauthToken && (
+              <span className="oauth-badge">No write token — re-login to save</span>
+            )}
             <button onClick={() => refetch()} className="refresh-btn" title="Refresh data">
-              <RefreshCw size={15} />
-              <span>Refresh</span>
+              <RefreshCw size={15} /><span>Refresh</span>
             </button>
-            <button onClick={handleLogout} className="logout-btn">
-              <LogOut size={15} />
-              <span>Logout</span>
+            <button onClick={logout} className="logout-btn">
+              <LogOut size={15} /><span>Logout</span>
             </button>
           </div>
         </div>
 
-        {/* ── Slash divider ───────────────────────── */}
+        {/* Slash divider */}
         <div className="slash-divider" aria-hidden="true">
           <div className="slash-line" />
           <span className="slash-text">LIVE DATA</span>
           <div className="slash-line" />
         </div>
 
-        {/* ── Stat cards ──────────────────────────── */}
+        {/* Stats */}
         <div className="stat-grid">
-          <StatCard label="Total Stations" value={total}     icon={Gamepad2}      color="text-violet" glow="#a855f7" />
-          <StatCard label="Available Now"  value={available} icon={CheckCircle2}  color="text-green"  glow="#22c55e" />
-          <StatCard label="Occupied"       value={occupied}  icon={Clock}         color="text-red"    glow="#ef4444" />
-          <StatCard label="Utilisation"    value={total ? Math.round(occupied/total*100) : 0} icon={Star} color="text-pink" glow="#ec4899" />
+          <StatCard label="Total Stations" value={total}     icon={Gamepad2}     glow="#a855f7" />
+          <StatCard label="Available Now"  value={available} icon={CheckCircle2} glow="#22c55e" />
+          <StatCard label="Occupied"       value={occupied}  icon={Clock}        glow="#ef4444" />
+          <StatCard label="Utilisation"    value={utilPct}   icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* ── Loading ─────────────────────────────── */}
+        {/* Loading */}
         {isLoading && (
           <div className="loading-wrap">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="skeleton-row" style={{ animationDelay: `${i * 80}ms` }} />
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="skeleton-row" style={{ animationDelay: `${i * 70}ms` }} />
             ))}
           </div>
         )}
 
-        {/* ── Error ───────────────────────────────── */}
+        {/* Error */}
         {isError && (
           <div className="error-box">
             <AlertTriangle size={30} />
@@ -303,10 +297,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Table ───────────────────────────────── */}
+        {/* Table */}
         {!isLoading && !isError && (
           <div className="table-wrap">
-            {/* Running neon top border */}
             <div className="table-neon-border" />
             <div className="table-scroll">
               <table className="station-table">
@@ -319,7 +312,7 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {stations.map((s, i) => (
-                    <StationRow key={s.id} station={s} index={i} oauthToken={oauthToken} />
+                    <StationRow key={s.id ?? i} station={s} index={i} />
                   ))}
                 </tbody>
               </table>
@@ -327,15 +320,15 @@ export default function AdminDashboard() {
             <div className="table-neon-border table-neon-border-bottom" />
           </div>
         )}
-
-        {/* ── OAuth write notice ───────────────────── */}
-        {!oauthToken && !isLoading && !isError && (
-          <div className="oauth-notice">
-            <Zap size={14} />
-            <span>Re-login to enable write access to Google Sheets</span>
-          </div>
-        )}
       </div>
     </div>
   );
+};
+
+// ── Root export ────────────────────────────────────────────────────────────
+export default function AdminDashboard() {
+  const user = useAuthStore(s => s.user);
+  // ProtectedRoute handles the loading state, so by the time
+  // AdminDashboard renders, we know loading is false.
+  return user ? <DashboardView /> : <LoginGate />;
 }
