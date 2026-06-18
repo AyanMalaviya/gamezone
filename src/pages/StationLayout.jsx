@@ -23,10 +23,9 @@ export default function StationLayout() {
   const { stations, isLoading, isError } = useStationData();
   const [selected, setSelected] = useState(null);
 
-  const sorted   = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
+  const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
   const rowTop    = sorted.filter(s => Number(s.id) >= 1 && Number(s.id) <= 7);
   const rowRacing = sorted.filter(s => Number(s.id) === 8);
-  // 14 13 12 11 10 9  — reverse so 14 is leftmost
   const rowBottom = sorted.filter(s => Number(s.id) >= 9 && Number(s.id) <= 14).reverse();
 
   const available = stations.filter(s => s.status === 'available' && Number(s.id) !== 8).length;
@@ -45,7 +44,12 @@ export default function StationLayout() {
         `,
       }} />
 
-      <main style={{ flex: 1, position: 'relative', zIndex: 1, padding: 'clamp(20px,4vw,40px) clamp(16px,3vw,32px) 56px' }}>
+      {/* paddingTop: 72px pushes content below the fixed navbar */}
+      <main style={{
+        flex: 1, position: 'relative', zIndex: 1,
+        paddingTop: 72,
+        padding: '72px clamp(16px,3vw,32px) 56px',
+      }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
           {/* Title */}
@@ -95,7 +99,6 @@ export default function StationLayout() {
               color:'rgba(255,255,255,0.12)', fontWeight:700,
             }}>Floor Plan</span>
 
-            {/* Loading skeleton */}
             {isLoading && (
               <>
                 <SkeletonRow count={7} />
@@ -109,7 +112,6 @@ export default function StationLayout() {
               </>
             )}
 
-            {/* Error */}
             {isError && (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12, padding:'40px 0' }}>
                 <span style={{ fontSize:'1.8rem' }}>⚠️</span>
@@ -124,20 +126,15 @@ export default function StationLayout() {
 
             {!isLoading && !isError && (
               <>
-                {/* Row A: 1 – 7 */}
                 <div className="station-row">
                   {rowTop.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
                 </div>
-
-                {/* Row B: Racing sim — right aligned */}
                 <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: 5 }}>
                     <span style={{ fontSize:'clamp(0.48rem,0.9vw,0.58rem)', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'rgba(245,158,11,0.5)' }}>🏁 Racing</span>
                     {rowRacing.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
                   </div>
                 </div>
-
-                {/* Row C: 14 – 9 */}
                 <div className="station-row">
                   {rowBottom.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
                 </div>

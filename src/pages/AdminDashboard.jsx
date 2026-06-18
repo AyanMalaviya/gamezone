@@ -10,11 +10,10 @@ import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
 import { auth, googleProvider } from '../lib/firebase';
-import { createSlugSession, TTL_MINUTES } from '../lib/adminSlug';
+import { TTL_MINUTES } from '../lib/adminSlug';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-/* ── Google icon ──────────────────────────────────────────────────────────── */
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -24,7 +23,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
-/* ── Neon background ──────────────────────────────────────────────────────── */
 const NeonBg = () => (
   <div className="adm-bg" aria-hidden="true">
     <div className="adm-orb adm-orb-1" />
@@ -35,7 +33,6 @@ const NeonBg = () => (
   </div>
 );
 
-/* ── Count-up stat card ───────────────────────────────────────────────────── */
 const StatCard = ({ label, value, Icon, glow }) => {
   const [n, setN] = useState(0);
   useEffect(() => {
@@ -65,7 +62,6 @@ const StatCard = ({ label, value, Icon, glow }) => {
   );
 };
 
-/* ── TTL countdown badge ──────────────────────────────────────────────────── */
 const TtlBadge = ({ expiry, onExpired }) => {
   const [remaining, setRemaining] = useState(() => Math.max(0, expiry - Date.now()));
 
@@ -78,8 +74,8 @@ const TtlBadge = ({ expiry, onExpired }) => {
     return () => clearInterval(id);
   }, [expiry, onExpired]);
 
-  const mins = Math.floor(remaining / 60000);
-  const secs = Math.floor((remaining % 60000) / 1000);
+  const mins  = Math.floor(remaining / 60000);
+  const secs  = Math.floor((remaining % 60000) / 1000);
   const label = `${mins}:${String(secs).padStart(2, '0')}`;
   const pct   = remaining / (TTL_MINUTES * 60000);
   const urgent = pct < 0.2;
@@ -101,7 +97,6 @@ const TtlBadge = ({ expiry, onExpired }) => {
   );
 };
 
-/* ── Login page ───────────────────────────────────────────────────────────── */
 const LoginPage = ({ onLogin, busy }) => (
   <div className="adm-login-wrap">
     <NeonBg />
@@ -127,7 +122,6 @@ const LoginPage = ({ onLogin, busy }) => (
   </div>
 );
 
-/* ── Editable station row ─────────────────────────────────────────────────── */
 const StationRow = ({ station, index, oauthToken }) => {
   const init = () => ({
     status:        station.status        || 'available',
@@ -206,35 +200,25 @@ const StationRow = ({ station, index, oauthToken }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Main Dashboard
-   - Generates a fresh random slug on mount via createSlugSession()
-   - Registers it in authStore so App.jsx dynamic route picks it up
-   - Counts down 10 min; on expiry OR logout → clears slug → route vanishes
-══════════════════════════════════════════════════════════════════════════════ */
 export default function AdminDashboard() {
-  const user          = useAuthStore(s => s.user);
-  const setUser       = useAuthStore(s => s.setUser);
-  const oauthToken    = useAuthStore(s => s.oauthToken);
-  const setOauthToken = useAuthStore(s => s.setOauthToken);
-  const setAdminSlug  = useAuthStore(s => s.setAdminSlug);
+  const user           = useAuthStore(s => s.user);
+  const setUser        = useAuthStore(s => s.setUser);
+  const oauthToken     = useAuthStore(s => s.oauthToken);
+  const setOauthToken  = useAuthStore(s => s.setOauthToken);
   const clearAdminSlug = useAuthStore(s => s.clearAdminSlug);
-  const slugExpiry    = useAuthStore(s => s.slugExpiry);
+  const slugExpiry     = useAuthStore(s => s.slugExpiry);
 
   const [loginBusy, setLoginBusy] = useState(false);
   const { stations, isLoading, isError, refetch } = useStationData();
   const navigate = useNavigate();
   const zapRef   = useRef(null);
 
-  /* ── Generate slug once on mount ──────────────────────────────────────── */
+  // NOTE: Slug is generated in Navbar BEFORE navigation — do NOT re-generate here.
+  // Only register the cleanup: destroy slug when admin leaves the page.
   useEffect(() => {
-    const { slug, expiry } = createSlugSession();
-    setAdminSlug(slug, expiry);
-    // Cleanup: destroy slug when component unmounts
     return () => clearAdminSlug();
   }, []); // eslint-disable-line
 
-  /* ── Disco hue on ⚡ ───────────────────────────────────────────────────── */
   useEffect(() => {
     if (!zapRef.current) return;
     let h = 0;
@@ -245,17 +229,15 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [user]);
 
-  /* ── Called when TTL hits zero ─────────────────────────────────────────── */
   const handleExpired = useCallback(() => {
     clearAdminSlug();
     navigate('/', { replace: true });
   }, [clearAdminSlug, navigate]);
 
-  /* ── Logout: destroy slug + sign out ──────────────────────────────────── */
   const handleLogout = async () => {
-    clearAdminSlug();                  // Destroy slug immediately
+    clearAdminSlug();
     await signOut(auth);
-    useAuthStore.getState().clear();   // Wipes user/role/token too
+    useAuthStore.getState().clear();
     navigate('/', { replace: true });
   };
 
@@ -284,9 +266,9 @@ export default function AdminDashboard() {
       <NeonBg />
       <Navbar />
 
-      <main className="adm-body">
+      {/* Push content below fixed navbar */}
+      <main className="adm-body" style={{ paddingTop: 72 }}>
 
-        {/* ── Header ──────────────────────────────────────────── */}
         <div className="adm-hdr">
           <div className="adm-hdr-l">
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
@@ -296,7 +278,6 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="adm-hdr-r" style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {/* TTL countdown — only renders once slugExpiry is set */}
             {slugExpiry && (
               <TtlBadge expiry={slugExpiry} onExpired={handleExpired} />
             )}
@@ -309,14 +290,12 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* ── Neon divider ───────────────────────────────────── */}
         <div className="adm-divider" aria-hidden="true">
           <div className="adm-div-line" />
           <span className="adm-div-txt">LIVE DATA</span>
           <div className="adm-div-line" />
         </div>
 
-        {/* ── Stat cards ─────────────────────────────────────── */}
         <div className="sc-grid">
           <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
           <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
@@ -324,7 +303,6 @@ export default function AdminDashboard() {
           <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* ── OAuth warning ──────────────────────────────────── */}
         {!oauthToken && (
           <div className="adm-warn">
             <Zap size={13} />
@@ -332,7 +310,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Loading ──────────────────────────────────────────── */}
         {isLoading && (
           <div className="adm-skeletons">
             {[...Array(6)].map((_, i) => (
@@ -341,7 +318,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Error ──────────────────────────────────────────── */}
         {isError && (
           <div className="adm-error">
             <AlertTriangle size={32} />
@@ -350,7 +326,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── Table ──────────────────────────────────────────── */}
         {!isLoading && !isError && (
           <div className="tbl-wrap">
             <div className="tbl-neon tbl-neon-top" />
