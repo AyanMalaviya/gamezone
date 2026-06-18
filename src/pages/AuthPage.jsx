@@ -36,43 +36,31 @@ function Particles() {
 
 function VerifyEmailScreen({ email, onBack }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      gap: 16, padding: '8px 0 4px', textAlign: 'center',
-    }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:16, padding:'8px 0 4px', textAlign:'center' }}>
       <div style={{
-        width: 64, height: 64, borderRadius: '50%',
-        background: 'rgba(124,58,237,0.12)',
-        border: '2px solid rgba(124,58,237,0.3)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 0 24px rgba(124,58,237,0.2)',
-      }}>
-        <Send size={26} color="#a78bfa" />
-      </div>
+        width:64, height:64, borderRadius:'50%',
+        background:'rgba(124,58,237,0.12)', border:'2px solid rgba(124,58,237,0.3)',
+        display:'flex', alignItems:'center', justifyContent:'center',
+        boxShadow:'0 0 24px rgba(124,58,237,0.2)',
+      }}><Send size={26} color="#a78bfa" /></div>
       <div>
-        <h2 style={{
-          fontFamily: "'Rajdhani','Inter',sans-serif",
-          fontWeight: 700, fontSize: '1.2rem', color: '#fff', marginBottom: 6,
-        }}>Check your inbox</h2>
-        <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.83rem', lineHeight: 1.6 }}>
+        <h2 style={{ fontFamily:"'Rajdhani','Inter',sans-serif", fontWeight:700, fontSize:'1.2rem', color:'#fff', marginBottom:6 }}>Check your inbox</h2>
+        <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'0.83rem', lineHeight:1.6 }}>
           We sent a verification link to<br />
-          <strong style={{ color: 'rgba(255,255,255,0.75)' }}>{email}</strong>
+          <strong style={{ color:'rgba(255,255,255,0.75)' }}>{email}</strong>
         </p>
       </div>
       <div style={{
-        background: 'rgba(124,58,237,0.08)',
-        border: '1px solid rgba(124,58,237,0.18)',
-        borderRadius: 10, padding: '12px 16px',
-        fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)',
-        lineHeight: 1.6, width: '100%',
+        background:'rgba(124,58,237,0.08)', border:'1px solid rgba(124,58,237,0.18)',
+        borderRadius:10, padding:'12px 16px', fontSize:'0.78rem',
+        color:'rgba(255,255,255,0.4)', lineHeight:1.6, width:'100%',
       }}>
-        Click the link in the email to activate your account,
-        then come back here to sign in.
+        Click the link in the email to activate your account, then come back here to sign in.
       </div>
       <button type="button" onClick={onBack} style={{
-        marginTop: 4, background: 'none', border: 'none',
-        color: '#a78bfa', fontSize: '0.83rem', cursor: 'pointer',
-        textDecoration: 'underline', textUnderlineOffset: 3,
+        marginTop:4, background:'none', border:'none',
+        color:'#a78bfa', fontSize:'0.83rem', cursor:'pointer',
+        textDecoration:'underline', textUnderlineOffset:3,
       }}>Back to Sign In</button>
     </div>
   );
@@ -84,18 +72,17 @@ export default function AuthPage() {
   const user        = useAuthStore(s => s.user);
   const authLoading = useAuthStore(s => s.loading);
 
-  const [tab, setTab]                   = useState(mode === 'register' ? 'register' : 'login');
-  const [email, setEmail]               = useState('');
-  const [password, setPassword]         = useState('');
-  const [phone, setPhone]               = useState('');
-  const [showPw, setShowPw]             = useState(false);
-  const [busy, setBusy]                 = useState(false);
-  const [error, setError]               = useState('');
-  const [verifyScreen, setVerify]       = useState(false);
-  const [verifyEmail, setVerifyEmail]   = useState('');
-  // CAPTCHA state — shown after user fills form, before submit
-  const [showCaptcha, setShowCaptcha]   = useState(false);
-  const [captchaDone, setCaptchaDone]   = useState(false);
+  const [tab, setTab]                 = useState(mode === 'register' ? 'register' : 'login');
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [phone, setPhone]             = useState('');
+  const [showPw, setShowPw]           = useState(false);
+  const [busy, setBusy]               = useState(false);
+  const [error, setError]             = useState('');
+  const [verifyScreen, setVerify]     = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [captchaDone, setCaptchaDone] = useState(false);
   const sliderRef = useRef(null);
 
   useEffect(() => {
@@ -119,37 +106,35 @@ export default function AuthPage() {
   const friendly = (code = '', msg = '') => {
     const s = code + msg;
     if (s.includes('user-not-found') || s.includes('invalid-credential')) return 'No account found with those credentials.';
-    if (s.includes('wrong-password'))     return 'Incorrect password. Try again.';
-    if (s.includes('email-already'))      return 'Email already registered — try signing in.';
-    if (s.includes('weak-password'))      return 'Password must be at least 6 characters.';
-    if (s.includes('invalid-email'))      return 'Please enter a valid email address.';
-    if (s.includes('too-many-requests'))  return 'Too many attempts. Wait a moment and retry.';
-    if (s.includes('email-not-verified')) return 'Email not verified. Check your inbox for the link.';
-    if (s.includes('network-request'))    return 'Network error. Check your connection.';
+    if (s.includes('wrong-password'))    return 'Incorrect password. Try again.';
+    if (s.includes('email-already'))     return 'Email already registered — try signing in.';
+    if (s.includes('weak-password'))     return 'Password must be at least 6 characters.';
+    if (s.includes('invalid-email'))     return 'Please enter a valid email address.';
+    if (s.includes('too-many-requests')) return 'Too many attempts. Wait a moment and retry.';
+    if (s.includes('email-not-verified'))return 'Email not verified. Check your inbox for the link.';
+    if (s.includes('network-request'))   return 'Network error. Check your connection.';
     return msg.replace('Firebase: ', '').replace(/\s*\(.*\)/, '') || 'Something went wrong.';
   };
 
-  // Step 1 — validate form fields, then show CAPTCHA
+  // Validate phone only if user typed something (it's now optional)
+  const validatePhone = (val) => {
+    if (!val.trim()) return null; // empty = optional, OK
+    const normalized = normalizePhone(val.trim());
+    if (!/^\+91[6-9]\d{9}$/.test(normalized)) return 'Enter a valid 10-digit Indian mobile number.';
+    return null;
+  };
+
   const handleFormNext = (e) => {
     e.preventDefault();
     setError('');
-
     if (!isLogin) {
-      if (!phone.trim()) { setError('Phone number is required to book stations.'); return; }
-      const normalized = normalizePhone(phone.trim());
-      if (!/^\+91[6-9]\d{9}$/.test(normalized)) { setError('Enter a valid 10-digit Indian mobile number.'); return; }
+      const phoneErr = validatePhone(phone);
+      if (phoneErr) { setError(phoneErr); return; }
     }
-
-    if (!captchaDone) {
-      setShowCaptcha(true);
-      return;
-    }
-
-    // Already verified — proceed directly
+    if (!captchaDone) { setShowCaptcha(true); return; }
     submitAuth();
   };
 
-  // Step 2 — CAPTCHA passed, now actually authenticate
   const handleCaptchaVerified = () => {
     setCaptchaDone(true);
     setShowCaptcha(false);
@@ -157,32 +142,27 @@ export default function AuthPage() {
   };
 
   const submitAuth = async () => {
-    setBusy(true);
-    setError('');
+    setBusy(true); setError('');
     try {
       if (isLogin) {
         await loginWithEmail(email, password);
       } else {
-        const normalized = normalizePhone(phone.trim());
+        // Pass phone only if provided; otherwise empty string
+        const normalized = phone.trim() ? normalizePhone(phone.trim()) : '';
         await registerWithEmail(email, password, normalized);
         setVerifyEmail(email);
         setVerify(true);
       }
     } catch (err) {
       setError(friendly(err.code ?? '', err.message ?? ''));
-      // Reset CAPTCHA so user must pass it again on next attempt
       setCaptchaDone(false);
     } finally { setBusy(false); }
   };
 
   const handleGoogle = async () => {
     setError(''); setBusy(true);
-    try {
-      await loginWithGoogle();
-    } catch (err) {
-      setBusy(false);
-      setError(friendly(err.code ?? '', err.message ?? ''));
-    }
+    try { await loginWithGoogle(); }
+    catch (err) { setBusy(false); setError(friendly(err.code ?? '', err.message ?? '')); }
   };
 
   const isLogin = tab === 'login';
@@ -228,33 +208,30 @@ export default function AuthPage() {
               <p>{isLogin ? 'Sign in to access your GameZone' : 'Join GameZone and start playing'}</p>
             </div>
 
-            {/* Phone notice — Login tab */}
-            {isLogin && (
-              <div style={{
-                display: 'flex', gap: 8, alignItems: 'flex-start',
-                background: 'rgba(99,102,241,0.08)',
-                border: '1px solid rgba(99,102,241,0.22)',
-                borderRadius: 10, padding: '9px 12px',
-                fontSize: '0.74rem', color: 'rgba(255,255,255,0.45)',
-                lineHeight: 1.55, marginBottom: 2,
-              }}>
-                <Info size={13} color="#818cf8" style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>
-                  <strong style={{ color: 'rgba(255,255,255,0.65)' }}>Phone number required</strong> to book a station.
-                  If you signed up with Google, you&apos;ll be asked to add it before booking.
-                </span>
-              </div>
-            )}
+            {/* Info banner */}
+            <div style={{
+              display:'flex', gap:8, alignItems:'flex-start',
+              background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.22)',
+              borderRadius:10, padding:'9px 12px',
+              fontSize:'0.74rem', color:'rgba(255,255,255,0.45)',
+              lineHeight:1.55, marginBottom:2,
+            }}>
+              <Info size={13} color="#818cf8" style={{ flexShrink:0, marginTop:1 }} />
+              <span>
+                <strong style={{ color:'rgba(255,255,255,0.65)' }}>Phone number needed to book.</strong>{' '}
+                {isLogin
+                  ? "You'll be prompted to add it before your first booking."
+                  : 'You can add it now or later from your profile.'}
+              </span>
+            </div>
 
             <button className="auth-google" onClick={handleGoogle} disabled={busy} type="button">
-              {busy ? <Loader2 size={16} style={{ animation: 'auth-spin .7s linear infinite' }} /> : <GoogleIcon />}
+              {busy ? <Loader2 size={16} style={{ animation:'auth-spin .7s linear infinite' }} /> : <GoogleIcon />}
               <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
               <div className="auth-google-shine" />
             </button>
 
-            <div className="auth-divider">
-              <span /><p>or continue with email</p><span />
-            </div>
+            <div className="auth-divider"><span /><p>or continue with email</p><span /></div>
 
             <form onSubmit={handleFormNext} className="auth-form" noValidate>
               <div className="auth-field">
@@ -286,37 +263,34 @@ export default function AuthPage() {
                 </div>
               </div>
 
-              {/* Phone — Register tab only */}
+              {/* Phone — optional on register */}
               {!isLogin && (
                 <div className="auth-field">
-                  <label htmlFor="auth-phone">
+                  <label htmlFor="auth-phone" style={{ display:'flex', alignItems:'center', gap:7 }}>
                     Phone Number
                     <span style={{
-                      marginLeft: 6, fontSize: '0.68rem',
-                      background: 'rgba(124,58,237,0.18)',
-                      color: '#c4b5fd', borderRadius: 4,
-                      padding: '1px 6px', fontWeight: 500,
-                    }}>Required for booking</span>
+                      fontSize:'0.68rem',
+                      background:'rgba(255,255,255,0.08)',
+                      color:'rgba(255,255,255,0.4)',
+                      borderRadius:4, padding:'1px 6px', fontWeight:500,
+                    }}>Optional</span>
                   </label>
                   <div className="auth-input-wrap">
                     <Phone size={15} className="auth-input-icon" />
                     <input
-                      id="auth-phone" type="tel" placeholder="98765 43210"
+                      id="auth-phone" type="tel" placeholder="98765 43210 (add later from profile)"
                       value={phone}
                       onChange={e => { setPhone(e.target.value); setError(''); }}
                       autoComplete="tel"
                     />
                   </div>
-                  <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: 4, paddingLeft: 2 }}>
-                    Indian mobile number (+91). Used only for booking confirmations.
+                  <p style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.28)', marginTop:4, paddingLeft:2 }}>
+                    Indian mobile (+91). Required before booking — add now or later from your profile.
                   </p>
                 </div>
               )}
 
-              {/* CAPTCHA — slides in after form is filled */}
-              {showCaptcha && (
-                <GameCaptcha onVerified={handleCaptchaVerified} />
-              )}
+              {showCaptcha && <GameCaptcha onVerified={handleCaptchaVerified} />}
 
               {error && (
                 <div className="auth-alert auth-alert-err" role="alert">
@@ -326,22 +300,18 @@ export default function AuthPage() {
 
               {isLogin && !showCaptcha && (
                 <div className="auth-alert" role="note" style={{
-                  background: 'rgba(124,58,237,0.07)',
-                  border: '1px solid rgba(124,58,237,0.18)',
-                  color: 'rgba(255,255,255,0.4)',
-                  borderRadius: 8, padding: '8px 11px',
-                  fontSize: '0.72rem', display: 'flex', gap: 7, alignItems: 'flex-start',
+                  background:'rgba(124,58,237,0.07)', border:'1px solid rgba(124,58,237,0.18)',
+                  color:'rgba(255,255,255,0.4)', borderRadius:8, padding:'8px 11px',
+                  fontSize:'0.72rem', display:'flex', gap:7, alignItems:'flex-start',
                 }}>
-                  <CheckCircle2 size={13} color="#a78bfa" style={{ flexShrink: 0, marginTop: 1 }} />
+                  <CheckCircle2 size={13} color="#a78bfa" style={{ flexShrink:0, marginTop:1 }} />
                   <span>Your email must be verified before you can sign in.</span>
                 </div>
               )}
 
-              {/* Hide main submit while CAPTCHA is open */}
               {!showCaptcha && (
                 <button type="submit" disabled={busy} className="auth-submit">
-                  {busy
-                    ? <Loader2 size={16} className="auth-spin" />
+                  {busy ? <Loader2 size={16} className="auth-spin" />
                     : isLogin ? 'Sign In' : 'Create Account'}
                   <div className="auth-submit-shine" />
                 </button>

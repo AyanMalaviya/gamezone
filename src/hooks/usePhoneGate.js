@@ -1,46 +1,52 @@
 /**
  * usePhoneGate
+ * Returns { gated, PhoneGateModal } where:
+ *  - gated(fn) — calls fn() if user has a phone, otherwise opens the modal first.
+ *    Once the user saves their phone, fn() is called automatically.
+ *  - PhoneGateModal — JSX element to render anywhere in the tree.
  *
- * Returns a `requirePhone(callback)` wrapper.
- * - If the logged-in user already has a phone in the store → runs callback immediately.
- * - If phone is missing → opens the CompleteProfileModal by setting `phoneGateOpen: true`
- *   in the store, and queues the callback to run after the user saves their number.
- *
- * Usage (future Book button):
- *   const { requirePhone, PhoneGateModal } = usePhoneGate();
- *   <button onClick={() => requirePhone(() => openBookingFlow(station))}>Book</button>
- *   <PhoneGateModal />
+ * Usage:
+ *   const { gated, PhoneGateModal } = usePhoneGate();
+ *   <button onClick={() => gated(() => openBookingModal())}>Book</button>
+ *   {PhoneGateModal}
  */
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import useAuthStore from '../store/authStore';
 import CompleteProfileModal from '../components/CompleteProfileModal';
 
-export default function usePhoneGate() {
-  const phone = useAuthStore(s => s.phone);
-  const [open, setOpen]       = useState(false);
-  const [pending, setPending] = useState(null);
+export function usePhoneGate() {
+  const phone    = useAuthStore(s => s.phone);
+  const setPhone = useAuthStore(s => s.setPhone);
+  const [open, setOpen]         = useState(false);
+  const [pending, setPending]   = useState(null);
 
-  const requirePhone = (callback) => {
+  const gated = useCallback((fn) => {
     if (phone) {
-      callback();
+      fn();
     } else {
-      setPending(() => callback);
+      setPending(() => fn);
       setOpen(true);
     }
-  };
+  }, [phone]);
 
-  const handleSaved = () => {
+  const handleSaved = useCallback((savedPhone) => {
+    if (savedPhone) setPhone(savedPhone);
     setOpen(false);
-    if (pending) { pending(); setPending(null); }
-  };
+    // Run the originally-intended action now that phone is set
+    if (pending) {
+      pending();
+      setPending(null);
+    }
+  }, [pending, setPhone]);
 
-  const PhoneGateModal = () => (
+  const PhoneGateModal = (
     <CompleteProfileModal
       open={open}
-      onClose={() => setOpen(false)}
+      onClose={() => { setOpen(false); setPending(null); }}
       onSaved={handleSaved}
+      mode="gate"
     />
   );
 
-  return { requirePhone, PhoneGateModal };
+  return { gated, PhoneGateModal };
 }
