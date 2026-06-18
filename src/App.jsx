@@ -6,12 +6,16 @@ import LandingPage from './pages/LandingPage';
 import StationLayout from './pages/StationLayout';
 import AdminDashboard from './pages/AdminDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
+import AuthPage from './pages/AuthPage';
+
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 25000, retry: 2 } },
 });
 
+
 const adminSlug = import.meta.env.VITE_ADMIN_SLUG || 'admin';
+
 
 const router = createBrowserRouter([
   { path: '/',          element: <LandingPage /> },
@@ -21,8 +25,10 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [{ index: true, element: <AdminDashboard /> }],
   },
+  { path: '/auth/:mode', element: <AuthPage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ]);
+
 
 function AppInner() {
   useAuthListener();
@@ -39,6 +45,7 @@ function AppInner() {
   );
   return <RouterProvider router={router} />;
 }
+
 
 export default function App() {
   return (
