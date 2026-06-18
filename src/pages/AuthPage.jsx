@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Loader2, Mail, Lock, Eye, EyeOff,
-  Gamepad2, Zap, AlertCircle, CheckCircle2, Send,
+  Gamepad2, Zap, AlertCircle, CheckCircle2, Send, Phone,
 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loginWithGoogle } from '../hooks/useAuth';
 import useAuthStore from '../store/authStore';
@@ -33,7 +33,6 @@ function Particles() {
   );
 }
 
-// Shown after successful registration instead of redirecting
 function VerifyEmailScreen({ email, onBack }) {
   return (
     <div style={{
@@ -69,59 +68,51 @@ function VerifyEmailScreen({ email, onBack }) {
         Click the link in the email to activate your account,
         then come back here to sign in.
       </div>
-      <button
-        type="button"
-        onClick={onBack}
-        style={{
-          marginTop: 4, background: 'none', border: 'none',
-          color: '#a78bfa', fontSize: '0.83rem', cursor: 'pointer',
-          textDecoration: 'underline', textUnderlineOffset: 3,
-        }}
-      >
-        Back to Sign In
-      </button>
+      <button type="button" onClick={onBack} style={{
+        marginTop: 4, background: 'none', border: 'none',
+        color: '#a78bfa', fontSize: '0.83rem', cursor: 'pointer',
+        textDecoration: 'underline', textUnderlineOffset: 3,
+      }}>Back to Sign In</button>
     </div>
   );
 }
 
 export default function AuthPage() {
-  const { mode }  = useParams();
-  const navigate  = useNavigate();
-  const user      = useAuthStore(s => s.user);
+  const { mode }    = useParams();
+  const navigate    = useNavigate();
+  const user        = useAuthStore(s => s.user);
   const authLoading = useAuthStore(s => s.loading);
 
   const [tab, setTab]             = useState(mode === 'register' ? 'register' : 'login');
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
+  const [phone, setPhone]         = useState('');
   const [showPw, setShowPw]       = useState(false);
   const [busy, setBusy]           = useState(false);
   const [error, setError]         = useState('');
-  const [verifyScreen, setVerify] = useState(false); // shown after register
+  const [verifyScreen, setVerify] = useState(false);
   const [verifyEmail, setVerifyEmail] = useState('');
   const sliderRef = useRef(null);
 
-  // If already logged in (and email verified), go home
   useEffect(() => {
     if (!authLoading && user && user.emailVerified) navigate('/');
   }, [user, authLoading, navigate]);
 
-  // Keep URL in sync with tab
   useEffect(() => { navigate(`/auth/${tab}`, { replace: true }); }, [tab]); // eslint-disable-line
 
-  const resetForm = () => { setEmail(''); setPassword(''); setError(''); setShowPw(false); setVerify(false); };
+  const resetForm = () => { setEmail(''); setPassword(''); setPhone(''); setError(''); setShowPw(false); setVerify(false); };
   const switchTab = (t) => { setTab(t); resetForm(); };
 
   const friendly = (code = '', msg = '') => {
     const s = code + msg;
     if (s.includes('user-not-found') || s.includes('invalid-credential')) return 'No account found with those credentials.';
-    if (s.includes('wrong-password'))      return 'Incorrect password. Try again.';
-    if (s.includes('email-already'))       return 'Email already registered — try signing in.';
-    if (s.includes('weak-password'))       return 'Password must be at least 6 characters.';
-    if (s.includes('invalid-email'))       return 'Please enter a valid email address.';
-    if (s.includes('too-many-requests'))   return 'Too many attempts. Wait a moment and retry.';
-    if (s.includes('email-not-verified'))  return 'Email not verified. Check your inbox for the verification link.';
-    if (s.includes('popup-closed'))        return 'Sign-in popup was closed. Please try again.';
-    if (s.includes('network-request'))     return 'Network error. Check your connection.';
+    if (s.includes('wrong-password'))     return 'Incorrect password. Try again.';
+    if (s.includes('email-already'))      return 'Email already registered — try signing in.';
+    if (s.includes('weak-password'))      return 'Password must be at least 6 characters.';
+    if (s.includes('invalid-email'))      return 'Please enter a valid email address.';
+    if (s.includes('too-many-requests'))  return 'Too many attempts. Wait a moment and retry.';
+    if (s.includes('email-not-verified')) return 'Email not verified. Check your inbox for the link.';
+    if (s.includes('network-request'))    return 'Network error. Check your connection.';
     return msg.replace('Firebase: ', '').replace(/\s*\(.*\)/, '') || 'Something went wrong.';
   };
 
@@ -131,9 +122,10 @@ export default function AuthPage() {
     try {
       if (tab === 'login') {
         await loginWithEmail(email, password);
-        // onAuthStateChanged + useEffect redirect handles navigation
+        // redirect handled by useEffect above
       } else {
-        await registerWithEmail(email, password);
+        if (!phone.trim()) { setError('Phone number is required to register.'); setBusy(false); return; }
+        await registerWithEmail(email, password, phone.trim());
         setVerifyEmail(email);
         setVerify(true);
       }
@@ -142,17 +134,14 @@ export default function AuthPage() {
     } finally { setBusy(false); }
   };
 
-  // Google — triggers redirect, page reloads, result handled in useAuthListener
   const handleGoogle = async () => {
     setError(''); setBusy(true);
     try {
       await loginWithGoogle();
-      // page will redirect to Google and come back; no navigate() needed here
     } catch (err) {
       setBusy(false);
       setError(friendly(err.code ?? '', err.message ?? ''));
     }
-    // Don't setBusy(false) on success path — page will reload
   };
 
   const isLogin = tab === 'login';
@@ -168,26 +157,20 @@ export default function AuthPage() {
       </div>
 
       <Link to="/" className="auth-back">
-        <Gamepad2 size={15} />
-        <span>GameZone</span>
+        <Gamepad2 size={15} /><span>GameZone</span>
       </Link>
 
       <div className="auth-card">
         <div className="auth-card-edge" />
-
         <div className="auth-logo">
           <div className="auth-logo-icon"><Zap size={22} /></div>
           <span>GAME<b>ZONE</b></span>
         </div>
 
         {verifyScreen ? (
-          <VerifyEmailScreen
-            email={verifyEmail}
-            onBack={() => switchTab('login')}
-          />
+          <VerifyEmailScreen email={verifyEmail} onBack={() => switchTab('login')} />
         ) : (
           <>
-            {/* Tab switcher */}
             <div className="auth-tabs" role="tablist">
               <button role="tab" aria-selected={isLogin}
                 className={`auth-tab${isLogin ? ' auth-tab-active' : ''}`}
@@ -204,12 +187,8 @@ export default function AuthPage() {
               <p>{isLogin ? 'Sign in to access your GameZone' : 'Join GameZone and start playing'}</p>
             </div>
 
-            {/* Google */}
             <button className="auth-google" onClick={handleGoogle} disabled={busy} type="button">
-              {busy
-                ? <Loader2 size={16} style={{ animation: 'auth-spin .7s linear infinite' }} />
-                : <GoogleIcon />
-              }
+              {busy ? <Loader2 size={16} style={{ animation: 'auth-spin .7s linear infinite' }} /> : <GoogleIcon />}
               <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
               <div className="auth-google-shine" />
             </button>
@@ -248,6 +227,24 @@ export default function AuthPage() {
                 </div>
               </div>
 
+              {/* Phone — only on Register tab */}
+              {!isLogin && (
+                <div className="auth-field">
+                  <label htmlFor="auth-phone">Phone Number</label>
+                  <div className="auth-input-wrap">
+                    <Phone size={15} className="auth-input-icon" />
+                    <input
+                      id="auth-phone"
+                      type="tel"
+                      placeholder="+91 98765 43210"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      autoComplete="tel"
+                    />
+                  </div>
+                </div>
+              )}
+
               {error && (
                 <div className="auth-alert auth-alert-err" role="alert">
                   <AlertCircle size={14} /><span>{error}</span>
@@ -268,10 +265,7 @@ export default function AuthPage() {
               )}
 
               <button type="submit" disabled={busy} className="auth-submit">
-                {busy
-                  ? <Loader2 size={16} className="auth-spin" />
-                  : isLogin ? 'Sign In' : 'Create Account'
-                }
+                {busy ? <Loader2 size={16} className="auth-spin" /> : isLogin ? 'Sign In' : 'Create Account'}
                 <div className="auth-submit-shine" />
               </button>
             </form>
