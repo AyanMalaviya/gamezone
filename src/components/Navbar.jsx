@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { LayoutDashboard } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
-const NAV_LINKS = [
+const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
   { label: 'Stations', href: '/stations' },
   { label: 'Pricing',  href: '#pricing' },
@@ -32,9 +33,13 @@ function GZLogo() {
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobile] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const location  = useLocation();
+  const navigate  = useNavigate();
+  const { user, role, logout } = useAuthStore();
+
+  const isAdmin    = role === 'admin';
+  const adminSlug  = import.meta.env.VITE_ADMIN_SLUG ?? 'admin';
+  const adminPath  = `/${adminSlug}`;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -70,7 +75,7 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <nav className="navbar-links" aria-label="Primary navigation">
-            {NAV_LINKS.map((link) => (
+            {PUBLIC_NAV.map((link) => (
               <Link
                 key={link.label}
                 to={link.href}
@@ -80,6 +85,19 @@ export default function Navbar() {
                 <span className="navbar-link-bar" />
               </Link>
             ))}
+
+            {/* Admin dashboard link — only visible when role === 'admin' */}
+            {isAdmin && (
+              <Link
+                to={adminPath}
+                className={`navbar-link navbar-link-admin${isActive(adminPath) ? ' navbar-link-active' : ''}`}
+                title="Admin Dashboard"
+              >
+                <LayoutDashboard size={14} style={{ display:'inline', marginRight:5, verticalAlign:'middle' }} />
+                Dashboard
+                <span className="navbar-link-bar" />
+              </Link>
+            )}
           </nav>
 
           {/* Auth buttons */}
@@ -88,6 +106,14 @@ export default function Navbar() {
               <>
                 <span className="navbar-user-pill">
                   <span className="navbar-user-dot" />
+                  {isAdmin && (
+                    <span style={{
+                      fontSize:'0.65rem', fontWeight:700, letterSpacing:'0.06em',
+                      background:'linear-gradient(90deg,#7c3aed,#a855f7)',
+                      color:'#fff', padding:'1px 6px', borderRadius:4,
+                      marginRight:5, textTransform:'uppercase',
+                    }}>ADMIN</span>
+                  )}
                   {user.email?.split('@')[0]}
                 </span>
                 <button
@@ -133,7 +159,7 @@ export default function Navbar() {
       {/* Mobile drawer */}
       <div className={`mobile-drawer${mobileOpen ? ' drawer-open' : ''}`} aria-hidden={!mobileOpen}>
         <div className="mobile-drawer-inner">
-          {NAV_LINKS.map(link => (
+          {PUBLIC_NAV.map(link => (
             <Link
               key={link.label}
               to={link.href}
@@ -143,6 +169,19 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+
+          {/* Admin link in mobile drawer */}
+          {isAdmin && (
+            <Link
+              to={adminPath}
+              className={`mobile-nav-link mobile-nav-admin${isActive(adminPath) ? ' mobile-nav-active' : ''}`}
+              onClick={() => setMobile(false)}
+            >
+              <LayoutDashboard size={14} style={{ display:'inline', marginRight:6, verticalAlign:'middle' }} />
+              Dashboard
+            </Link>
+          )}
+
           <div className="mobile-auth-row">
             {user ? (
               <button

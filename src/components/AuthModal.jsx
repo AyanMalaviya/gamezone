@@ -2,6 +2,7 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { X, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loginWithGoogle } from '../hooks/useAuth';
+import GameCaptcha from './GameCaptcha';
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -13,15 +14,18 @@ const GoogleIcon = () => (
 );
 
 export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
-  const [tab, setTab]       = useState(defaultTab);
-  const [email, setEmail]   = useState('');
-  const [pass, setPass]     = useState('');
-  const [error, setError]   = useState('');
-  const [busy, setBusy]     = useState(false);
+  const [tab, setTab]               = useState(defaultTab);
+  const [email, setEmail]           = useState('');
+  const [pass, setPass]             = useState('');
+  const [error, setError]           = useState('');
+  const [busy, setBusy]             = useState(false);
+  const [captchaOk, setCaptchaOk]   = useState(false);
 
-  const reset = () => { setEmail(''); setPass(''); setError(''); setBusy(false); };
+  const reset = () => { setEmail(''); setPass(''); setError(''); setBusy(false); setCaptchaOk(false); };
 
   const handleClose = () => { reset(); onClose(); };
+
+  const switchTab = (t) => { setTab(t); setError(''); setCaptchaOk(false); };
 
   const friendlyError = (code) => ({
     'auth/user-not-found':       'No account with that email.',
@@ -34,10 +38,11 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
 
   const handleEmail = async (e) => {
     e.preventDefault();
+    if (!captchaOk) { setError('Please complete the CAPTCHA first.'); return; }
     setError(''); setBusy(true);
     try {
-      if (tab === 'login')    await loginWithEmail(email, pass);
-      else                    await registerWithEmail(email, pass);
+      if (tab === 'login') await loginWithEmail(email, pass);
+      else                 await registerWithEmail(email, pass);
       handleClose();
     } catch (err) {
       setError(friendlyError(err.code));
@@ -45,6 +50,7 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
   };
 
   const handleGoogle = async () => {
+    if (!captchaOk) { setError('Please complete the CAPTCHA first.'); return; }
     setError(''); setBusy(true);
     try {
       await loginWithGoogle();
@@ -54,7 +60,6 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
     } finally { setBusy(false); }
   };
 
-  // input base styles
   const inputStyle = {
     width: '100%', padding: '10px 14px',
     background: 'rgba(255,255,255,0.04)',
@@ -81,11 +86,13 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
             background:'#131318',
             border:'1px solid rgba(124,58,237,0.25)',
             borderRadius:18,
-            width:'min(420px, calc(100vw - 2rem))',
+            width:'min(460px, calc(100vw - 2rem))',
             zIndex:61,
             boxShadow:'0 0 60px rgba(124,58,237,0.15), 0 24px 64px rgba(0,0,0,0.7)',
             animation:'fadeInUp 0.2s ease',
             overflow:'hidden',
+            maxHeight: '90dvh',
+            overflowY: 'auto',
           }}
         >
           {/* Purple top bar */}
@@ -124,7 +131,7 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
               borderRadius:10, padding:3, marginBottom:24, gap:3,
             }}>
               {['login','register'].map(t => (
-                <button key={t} onClick={() => { setTab(t); setError(''); }} style={{
+                <button key={t} onClick={() => switchTab(t)} style={{
                   padding:'8px 0', borderRadius:8, fontSize:'0.82rem',
                   fontWeight:600, cursor:'pointer', transition:'all 150ms ease',
                   background: tab===t ? 'rgba(124,58,237,0.3)' : 'transparent',
@@ -180,6 +187,32 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
                 />
               </div>
 
+              {/* CAPTCHA */}
+              {!captchaOk ? (
+                <div style={{
+                  marginTop: 4,
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  border: '1px solid rgba(124,58,237,0.2)',
+                  background: 'rgba(124,58,237,0.04)',
+                }}>
+                  <GameCaptcha onVerified={() => setCaptchaOk(true)} />
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '9px 14px', borderRadius: 10,
+                  background: 'rgba(34,197,94,0.08)',
+                  border: '1px solid rgba(34,197,94,0.25)',
+                  fontSize: '0.82rem', color: '#86efac',
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 8l3.5 3.5L13 5" stroke="#86efac" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  CAPTCHA verified
+                </div>
+              )}
+
               {error && (
                 <div style={{
                   display:'flex', alignItems:'center', gap:8,
@@ -191,15 +224,19 @@ export default function AuthModal({ open, onClose, defaultTab = 'login' }) {
                 </div>
               )}
 
-              <button type="submit" disabled={busy} style={{
+              <button type="submit" disabled={busy || !captchaOk} style={{
                 marginTop:4, padding:'11px 0',
-                background:'linear-gradient(135deg,#7c3aed,#9333ea)',
+                background: captchaOk
+                  ? 'linear-gradient(135deg,#7c3aed,#9333ea)'
+                  : 'rgba(124,58,237,0.25)',
                 border:'none', borderRadius:10,
-                color:'#fff', fontWeight:700, fontSize:'0.9rem',
-                cursor:'pointer', transition:'opacity 150ms ease',
+                color: captchaOk ? '#fff' : 'rgba(255,255,255,0.35)',
+                fontWeight:700, fontSize:'0.9rem',
+                cursor: captchaOk ? 'pointer' : 'not-allowed',
+                transition:'all 150ms ease',
                 display:'flex', alignItems:'center', justifyContent:'center', gap:8,
                 opacity: busy ? 0.7 : 1,
-                boxShadow:'0 0 20px rgba(124,58,237,0.35)',
+                boxShadow: captchaOk ? '0 0 20px rgba(124,58,237,0.35)' : 'none',
               }}>
                 {busy ? <Loader2 size={16} style={{ animation:'spin 0.8s linear infinite' }}/> : null}
                 {tab === 'login' ? 'Sign In' : 'Create Account'}
