@@ -5,13 +5,14 @@ const useStationData = () => {
   const query = useQuery({
     queryFn: getStations,
     queryKey: ['stations'],
-    refetchInterval: 30000,
+    refetchInterval: 30_000,
   });
 
   return {
-    isError: query.isError,
+    isError:   query.isError,
     isLoading: query.isLoading,
-    stations: query.data ?? [],
+    refetch:   query.refetch,
+    stations:  query.data ?? [],
   };
 };
 

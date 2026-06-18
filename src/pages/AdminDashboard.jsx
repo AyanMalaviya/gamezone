@@ -1,19 +1,19 @@
-import { useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  LogOut, Save, Loader2, ShieldCheck, Gamepad2,
-  Zap, Clock, Star, RefreshCw, CheckCircle2, AlertTriangle,
+  LogOut, Save, Loader2, ShieldCheck,
+  Gamepad2, Zap, Clock, Star,
+  RefreshCw, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
-import { useState } from 'react';
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
-import { loginWithGoogle, logout } from '../hooks/useAuth';
+import { auth, googleProvider, signInWithPopup, signOut } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-// ── Google logo ───────────────────────────────────────────────────────────────
+/* ── Google icon ──────────────────────────────────────────────────────────── */
 const GoogleIcon = () => (
-  <svg viewBox="0 0 24 24" width="20" height="20">
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -21,127 +21,95 @@ const GoogleIcon = () => (
   </svg>
 );
 
-// ── Animated neon background ─────────────────────────────────────────────
-const NeonBackground = () => (
-  <div className="admin-bg" aria-hidden="true">
-    <div className="admin-orb admin-orb-1" />
-    <div className="admin-orb admin-orb-2" />
-    <div className="admin-orb admin-orb-3" />
-    <div className="admin-scanlines" />
-    <div className="admin-grid" />
+/* ── Neon background (orbs + scanlines + grid) ────────────────────────────── */
+const NeonBg = () => (
+  <div className="adm-bg" aria-hidden="true">
+    <div className="adm-orb adm-orb-1" />
+    <div className="adm-orb adm-orb-2" />
+    <div className="adm-orb adm-orb-3" />
+    <div className="adm-scanlines" />
+    <div className="adm-dotgrid" />
   </div>
 );
 
-// ── Count-up stat card ────────────────────────────────────────────────
-const StatCard = ({ label, value, icon: Icon, glow }) => {
-  const [display, setDisplay] = useState(0);
+/* ── Count-up stat card ───────────────────────────────────────────────────── */
+const StatCard = ({ label, value, Icon, glow }) => {
+  const [n, setN] = useState(0);
   useEffect(() => {
     const target = Number(value) || 0;
-    let n = 0;
-    const step = Math.max(1, Math.ceil(target / 20));
+    if (target === 0) { setN(0); return; }
+    let cur = 0;
+    const step = Math.max(1, Math.ceil(target / 22));
     const id = setInterval(() => {
-      n = Math.min(n + step, target);
-      setDisplay(n);
-      if (n >= target) clearInterval(id);
-    }, 40);
+      cur += step;
+      if (cur >= target) { setN(target); clearInterval(id); }
+      else setN(cur);
+    }, 38);
     return () => clearInterval(id);
   }, [value]);
 
   return (
-    <div className="stat-card" style={{ '--glow-color': glow }}>
-      <div className="stat-card-inner">
-        <div className="stat-icon" style={{ background: `${glow}22`, border: `1px solid ${glow}44` }}>
-          <Icon size={20} style={{ color: glow }} />
-        </div>
+    <div className="sc" style={{ '--g': glow }}>
+      <div className="sc-inner">
+        <div className="sc-icon"><Icon size={20} /></div>
         <div>
-          <p className="stat-label">{label}</p>
-          <p className="stat-value" style={{ color: glow }}>{display}{label === 'Utilisation' ? '%' : ''}</p>
+          <p className="sc-label">{label}</p>
+          <p className="sc-val">{n}{label === 'Utilisation' ? '%' : ''}</p>
         </div>
       </div>
-      <div className="stat-bar" style={{ background: `linear-gradient(90deg, ${glow}88, transparent)` }} />
+      <div className="sc-bar" />
     </div>
   );
 };
 
-// ── Login gate ────────────────────────────────────────────────────────────
-const LoginGate = () => {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+/* ── Login page ───────────────────────────────────────────────────────────── */
+const LoginPage = ({ onLogin, busy }) => (
+  <div className="adm-login-wrap">
+    <NeonBg />
+    <Navbar />
+    <div className="login-center">
+      <div className="login-card">
+        <span className="lc-edge lc-top"    />
+        <span className="lc-edge lc-right"  />
+        <span className="lc-edge lc-bottom" />
+        <span className="lc-edge lc-left"   />
 
-  const handleGoogle = async () => {
-    setBusy(true); setError('');
-    try {
-      await loginWithGoogle();
-      // useAuthStore is updated inside loginWithGoogle —
-      // ProtectedRoute will re-render and show <Outlet /> automatically
-    } catch (e) {
-      setError(e?.code === 'auth/popup-closed-by-user'
-        ? 'Sign-in cancelled.'
-        : 'Sign-in failed. Please try again.');
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="admin-login-wrap">
-      <NeonBackground />
-      <Navbar />
-      <div className="login-center">
-        <div className="login-card">
-          <div className="login-border-top" />
-          <div className="login-border-right" />
-          <div className="login-border-bottom" />
-          <div className="login-border-left" />
-
-          <div className="login-shield"><ShieldCheck size={32} /></div>
-          <h1 className="login-title">ADMIN ACCESS</h1>
-          <p className="login-sub">Restricted zone — authenticate to proceed</p>
-
-          <div className="login-divider"><span>GOOGLE AUTH</span></div>
-
-          <button onClick={handleGoogle} disabled={busy} className="login-btn">
-            {busy ? <Loader2 size={18} className="spin" /> : <GoogleIcon />}
-            <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
-            <div className="login-btn-shine" />
-          </button>
-
-          {error && (
-            <div className="login-error">
-              <AlertTriangle size={14} />
-              <span>{error}</span>
-            </div>
-          )}
-          <p className="login-note">Only authorized admins can access this panel</p>
+        <div className="login-shield">
+          <ShieldCheck size={34} />
         </div>
+        <h1 className="login-title">ADMIN ACCESS</h1>
+        <p className="login-sub">Restricted zone — authenticate to proceed</p>
+
+        <div className="login-divider"><span>GOOGLE AUTH</span></div>
+
+        <button onClick={onLogin} disabled={busy} className="login-btn">
+          {busy ? <Loader2 size={18} className="adm-spin" /> : <GoogleIcon />}
+          <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
+          <div className="login-shine" />
+        </button>
+
+        <p className="login-note">Only authorised admins can access this panel</p>
       </div>
     </div>
-  );
-};
+  </div>
+);
 
-// ── Station table row ───────────────────────────────────────────────────
-const StationRow = ({ station, index }) => {
-  const oauthToken = useAuthStore(s => s.oauthToken);
-  const [form, setForm] = useState({
+/* ── Editable station row ─────────────────────────────────────────────────── */
+const StationRow = ({ station, index, oauthToken }) => {
+  const init = () => ({
     status:        station.status        || 'available',
     currentGame:   station.currentGame   || '',
     bookedSlots:   Array.isArray(station.bookedSlots)
-      ? station.bookedSlots.join(', ')
-      : (station.bookedSlots || ''),
+                     ? station.bookedSlots.join(', ')
+                     : (station.bookedSlots || ''),
     preferredGame: station.preferredGame || '',
   });
+  const [form, setForm]   = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(false);
 
-  useEffect(() => {
-    setForm({
-      status:        station.status        || 'available',
-      currentGame:   station.currentGame   || '',
-      bookedSlots:   Array.isArray(station.bookedSlots)
-        ? station.bookedSlots.join(', ')
-        : (station.bookedSlots || ''),
-      preferredGame: station.preferredGame || '',
-    });
-  }, [station]);
+  useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
 
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
@@ -168,41 +136,47 @@ const StationRow = ({ station, index }) => {
   const occupied = form.status?.toLowerCase() === 'occupied';
 
   return (
-    <tr className={`station-row ${occupied ? 'occupied' : 'available'}`}>
+    <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
+      {/* ID */}
       <td className="td-id">
         <div className="id-badge">
           <span>{String(station.id).padStart(2, '0')}</span>
-          <div className={`id-dot ${occupied ? 'dot-red' : 'dot-green'}`} />
+          <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
-      <td className="td-status">
+
+      {/* Status */}
+      <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
-          className={`status-select ${occupied ? 'sel-occupied' : 'sel-available'}`}>
+          className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
           <option value="available">● Available</option>
           <option value="occupied">● Occupied</option>
         </select>
       </td>
-      <td className="td-input">
-        <input type="text" name="currentGame" value={form.currentGame}
-          onChange={onChange} placeholder="e.g. FIFA 25" className="neon-input" />
-      </td>
-      <td className="td-input td-wide">
-        <input type="text" name="bookedSlots" value={form.bookedSlots}
-          onChange={onChange} placeholder="10:00-11:00, 13:00-14:00" className="neon-input" />
-      </td>
-      <td className="td-input">
-        <input type="text" name="preferredGame" value={form.preferredGame}
-          onChange={onChange} placeholder="Preferred game" className="neon-input" />
-      </td>
-      <td className="td-save">
-        <button onClick={onSave} disabled={saving || !oauthToken}
-          className={`save-btn ${saved ? 'save-ok' : err ? 'save-err' : ''}`}
-          title={!oauthToken ? 'Re-login to enable writes' : ''}>
-          <span className="save-btn-bg" />
-          {saving ? <Loader2 size={14} className="spin" />
-            : saved ? <CheckCircle2 size={14} />
-            : err   ? <AlertTriangle size={14} />
-            : <Save size={14} />}
+
+      {/* Current game */}
+      <td className="td-i"><input type="text" name="currentGame"
+        value={form.currentGame} onChange={onChange}
+        placeholder="e.g. FIFA 25" className="ni" /></td>
+
+      {/* Booked slots */}
+      <td className="td-i td-w"><input type="text" name="bookedSlots"
+        value={form.bookedSlots} onChange={onChange}
+        placeholder="10:00-11:00, 13:00-14:00" className="ni" /></td>
+
+      {/* Preferred game */}
+      <td className="td-i"><input type="text" name="preferredGame"
+        value={form.preferredGame} onChange={onChange}
+        placeholder="Preferred game" className="ni" /></td>
+
+      {/* Save */}
+      <td className="td-sv">
+        <button onClick={onSave} disabled={saving}
+          className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
+          {saving ? <Loader2 size={13} className="adm-spin" />
+            : saved ? <CheckCircle2 size={13} />
+            : err   ? <AlertTriangle size={13} />
+            : <Save size={13} />}
           <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
         </button>
       </td>
@@ -210,125 +184,146 @@ const StationRow = ({ station, index }) => {
   );
 };
 
-// ── Dashboard (shown after login) ─────────────────────────────────────────
-const DashboardView = () => {
-  const user       = useAuthStore(s => s.user);
-  const oauthToken = useAuthStore(s => s.oauthToken);
+/* ── Main Dashboard ───────────────────────────────────────────────────────── */
+export default function AdminDashboard() {
+  const user          = useAuthStore(s => s.user);
+  const setUser       = useAuthStore(s => s.setUser);
+  const oauthToken    = useAuthStore(s => s.oauthToken);
+  const setOauthToken = useAuthStore(s => s.setOauthToken);
+  const [loginBusy, setLoginBusy] = useState(false);
   const { stations, isLoading, isError, refetch } = useStationData();
-  const tickRef = useRef(null);
 
+  /* disco hue-rotate on the ⚡ icon */
+  const zapRef = useRef(null);
   useEffect(() => {
-    if (!tickRef.current) return;
-    let x = 0;
+    if (!zapRef.current) return;
+    let h = 0;
     const id = setInterval(() => {
-      x = (x + 0.5) % 360;
-      if (tickRef.current) tickRef.current.style.filter = `hue-rotate(${x}deg)`;
-    }, 30);
+      h = (h + 0.8) % 360;
+      if (zapRef.current) zapRef.current.style.filter = `hue-rotate(${h}deg)`;
+    }, 20);
     return () => clearInterval(id);
-  }, []);
+  }, [user]);
 
-  const total     = stations?.length ?? 0;
-  const available = stations?.filter(s => s.status?.toLowerCase() === 'available').length ?? 0;
-  const occupied  = stations?.filter(s => s.status?.toLowerCase() === 'occupied').length  ?? 0;
-  const utilPct   = total ? Math.round(occupied / total * 100) : 0;
+  const handleLogin = async () => {
+    setLoginBusy(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setUser(result.user);
+      // Capture OAuth token for Sheets write access
+      const { GoogleAuthProvider } = await import('firebase/auth');
+      const cred = GoogleAuthProvider.credentialFromResult(result);
+      setOauthToken(cred?.accessToken ?? null);
+    } catch (e) {
+      console.error(e);
+      alert('Sign-in failed. Try again.');
+    } finally { setLoginBusy(false); }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    useAuthStore.getState().clear();
+  };
+
+  if (!user) return <LoginPage onLogin={handleLogin} busy={loginBusy} />;
+
+  const total     = stations.length;
+  const available = stations.filter(s => s.status?.toLowerCase() === 'available').length;
+  const occupied  = stations.filter(s => s.status?.toLowerCase() === 'occupied').length;
+  const util      = total ? Math.round(occupied / total * 100) : 0;
 
   return (
-    <div className="admin-wrap">
-      <NeonBackground />
+    <div className="adm-wrap">
+      <NeonBg />
       <Navbar />
-      <div className="admin-body">
 
-        {/* Header */}
-        <div className="admin-header">
-          <div className="admin-header-left">
-            <div className="admin-title-row">
-              <div className="admin-title-icon" ref={tickRef}>
-                <Zap size={22} />
-              </div>
-              <div>
-                <h1 className="admin-title">STATION CONTROL</h1>
-                <p className="admin-sub">Live Google Sheets sync • {user?.email}</p>
-              </div>
+      <main className="adm-body">
+
+        {/* ── Header ───────────────────────────────────────────────── */}
+        <div className="adm-hdr">
+          <div className="adm-hdr-l">
+            <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
+            <div>
+              <h1 className="adm-title">STATION CONTROL</h1>
+              <p className="adm-sub">Live Google Sheets sync&nbsp;•&nbsp;{user.email}</p>
             </div>
           </div>
-          <div className="admin-header-right">
-            {!oauthToken && (
-              <span className="oauth-badge">No write token — re-login to save</span>
-            )}
-            <button onClick={() => refetch()} className="refresh-btn" title="Refresh data">
-              <RefreshCw size={15} /><span>Refresh</span>
+          <div className="adm-hdr-r">
+            <button onClick={() => refetch()} className="adm-btn adm-btn-refresh">
+              <RefreshCw size={14} /><span>Refresh</span>
             </button>
-            <button onClick={logout} className="logout-btn">
-              <LogOut size={15} /><span>Logout</span>
+            <button onClick={handleLogout} className="adm-btn adm-btn-logout">
+              <LogOut size={14} /><span>Logout</span>
             </button>
           </div>
         </div>
 
-        {/* Slash divider */}
-        <div className="slash-divider" aria-hidden="true">
-          <div className="slash-line" />
-          <span className="slash-text">LIVE DATA</span>
-          <div className="slash-line" />
+        {/* ── Neon divider ─────────────────────────────────────────── */}
+        <div className="adm-divider" aria-hidden="true">
+          <div className="adm-div-line" />
+          <span className="adm-div-txt">LIVE DATA</span>
+          <div className="adm-div-line" />
         </div>
 
-        {/* Stats */}
-        <div className="stat-grid">
-          <StatCard label="Total Stations" value={total}     icon={Gamepad2}     glow="#a855f7" />
-          <StatCard label="Available Now"  value={available} icon={CheckCircle2} glow="#22c55e" />
-          <StatCard label="Occupied"       value={occupied}  icon={Clock}        glow="#ef4444" />
-          <StatCard label="Utilisation"    value={utilPct}   icon={Star}         glow="#ec4899" />
+        {/* ── Stat cards ───────────────────────────────────────────── */}
+        <div className="sc-grid">
+          <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
+          <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
+          <StatCard label="Occupied"       value={occupied}  Icon={Clock}        glow="#ef4444" />
+          <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* Loading */}
+        {/* ── OAuth warning ────────────────────────────────────────── */}
+        {!oauthToken && (
+          <div className="adm-warn">
+            <Zap size={13} />
+            <span>Sign out and sign in again to enable write access to Google Sheets</span>
+          </div>
+        )}
+
+        {/* ── Loading ──────────────────────────────────────────────── */}
         {isLoading && (
-          <div className="loading-wrap">
+          <div className="adm-skeletons">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="skeleton-row" style={{ animationDelay: `${i * 70}ms` }} />
+              <div key={i} className="adm-skel" style={{ animationDelay: `${i * 70}ms` }} />
             ))}
           </div>
         )}
 
-        {/* Error */}
+        {/* ── Error ────────────────────────────────────────────────── */}
         {isError && (
-          <div className="error-box">
-            <AlertTriangle size={30} />
+          <div className="adm-error">
+            <AlertTriangle size={32} />
             <p>Failed to load station data</p>
             <span>Check VITE_SHEETS_ID and VITE_SHEETS_API_KEY in your .env</span>
           </div>
         )}
 
-        {/* Table */}
+        {/* ── Table ────────────────────────────────────────────────── */}
         {!isLoading && !isError && (
-          <div className="table-wrap">
-            <div className="table-neon-border" />
-            <div className="table-scroll">
-              <table className="station-table">
+          <div className="tbl-wrap">
+            <div className="tbl-neon tbl-neon-top" />
+            <div className="tbl-scroll">
+              <table className="tbl">
                 <thead>
-                  <tr className="table-head-row">
+                  <tr className="tbl-head">
                     {['#', 'Status', 'Current Game', 'Booked Slots', 'Preferred Game', ''].map(h => (
-                      <th key={h} className="th">{h}</th>
+                      <th key={h} className="tbl-th">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {stations.map((s, i) => (
-                    <StationRow key={s.id ?? i} station={s} index={i} />
+                    <StationRow key={s.id ?? i} station={s} index={i} oauthToken={oauthToken} />
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="table-neon-border table-neon-border-bottom" />
+            <div className="tbl-neon tbl-neon-bot" />
           </div>
         )}
-      </div>
+
+      </main>
     </div>
   );
-};
-
-// ── Root export ────────────────────────────────────────────────────────────
-export default function AdminDashboard() {
-  const user = useAuthStore(s => s.user);
-  // ProtectedRoute handles the loading state, so by the time
-  // AdminDashboard renders, we know loading is false.
-  return user ? <DashboardView /> : <LoginGate />;
 }
