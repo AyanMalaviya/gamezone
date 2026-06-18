@@ -79,16 +79,8 @@ export default function StationModal({ station, onClose }) {
     <Dialog.Root open={!!station} onOpenChange={open => !open && onClose()}>
       <Dialog.Portal>
 
-        {/* ── Overlay ── */}
+        {/* ── Overlay — single style prop ── */}
         <Dialog.Overlay
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.75)',
-            backdropFilter: 'blur(7px)',
-            WebkitBackdropFilter: 'blur(7px)',
-            zIndex: 9998,
-          }}
-          data-state="open"
           style={{
             position: 'fixed', inset: 0,
             background: 'rgba(0,0,0,0.75)',
@@ -105,7 +97,6 @@ export default function StationModal({ station, onClose }) {
           onEscapeKeyDown={onClose}
           onPointerDownOutside={onClose}
           style={{
-            /* CRITICAL: explicit fixed + translate(-50%,-50%) centering */
             position: 'fixed',
             top: '50%',
             left: '50%',
