@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 
 const useAuthStore = create((set) => ({
   user:        null,
@@ -8,8 +10,8 @@ const useAuthStore = create((set) => ({
   loading:     true,
 
   // Dynamic admin slug — generated at runtime, NOT from .env
-  adminSlug:   null,        // e.g. 'admin-a3f9c2b7e1d6'
-  slugExpiry:  null,        // Date timestamp (ms) when slug expires
+  adminSlug:   null,
+  slugExpiry:  null,
 
   setUser:       (user)       => set({ user }),
   setRole:       (role)       => set({ role }),
@@ -17,8 +19,18 @@ const useAuthStore = create((set) => ({
   setOauthToken: (oauthToken) => set({ oauthToken }),
   setLoading:    (loading)    => set({ loading }),
 
-  setAdminSlug: (adminSlug, slugExpiry) => set({ adminSlug, slugExpiry }),
+  setAdminSlug:   (adminSlug, slugExpiry) => set({ adminSlug, slugExpiry }),
   clearAdminSlug: () => set({ adminSlug: null, slugExpiry: null }),
+
+  // Clears local state + signs out from Firebase
+  logout: async () => {
+    await signOut(auth);
+    set({
+      user: null, role: null, phone: null,
+      oauthToken: null, loading: false,
+      adminSlug: null, slugExpiry: null,
+    });
+  },
 
   clear: () => set({
     user: null, role: null, phone: null,
