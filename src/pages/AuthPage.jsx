@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   Loader2, Mail, Lock, Eye, EyeOff,
-  Gamepad2, Zap, AlertCircle, CheckCircle2, Send, Phone,
+  Gamepad2, Zap, AlertCircle, CheckCircle2, Send, Phone, Info,
 } from 'lucide-react';
 import { loginWithEmail, registerWithEmail, loginWithGoogle } from '../hooks/useAuth';
 import useAuthStore from '../store/authStore';
@@ -103,6 +103,11 @@ export default function AuthPage() {
   const resetForm = () => { setEmail(''); setPassword(''); setPhone(''); setError(''); setShowPw(false); setVerify(false); };
   const switchTab = (t) => { setTab(t); resetForm(); };
 
+  const normalizePhone = (raw) => {
+    const cleaned = raw.replace(/[\s\-]/g, '');
+    return cleaned.startsWith('+91') ? cleaned : `+91${cleaned}`;
+  };
+
   const friendly = (code = '', msg = '') => {
     const s = code + msg;
     if (s.includes('user-not-found') || s.includes('invalid-credential')) return 'No account found with those credentials.';
@@ -122,10 +127,20 @@ export default function AuthPage() {
     try {
       if (tab === 'login') {
         await loginWithEmail(email, password);
-        // redirect handled by useEffect above
       } else {
-        if (!phone.trim()) { setError('Phone number is required to register.'); setBusy(false); return; }
-        await registerWithEmail(email, password, phone.trim());
+        // Validate phone
+        if (!phone.trim()) {
+          setError('Phone number is required to book stations.');
+          setBusy(false);
+          return;
+        }
+        const normalized = normalizePhone(phone.trim());
+        if (!/^\+91[6-9]\d{9}$/.test(normalized)) {
+          setError('Enter a valid 10-digit Indian mobile number.');
+          setBusy(false);
+          return;
+        }
+        await registerWithEmail(email, password, normalized);
         setVerifyEmail(email);
         setVerify(true);
       }
@@ -187,6 +202,24 @@ export default function AuthPage() {
               <p>{isLogin ? 'Sign in to access your GameZone' : 'Join GameZone and start playing'}</p>
             </div>
 
+            {/* Phone required notice — Login tab only */}
+            {isLogin && (
+              <div style={{
+                display: 'flex', gap: 8, alignItems: 'flex-start',
+                background: 'rgba(99,102,241,0.08)',
+                border: '1px solid rgba(99,102,241,0.22)',
+                borderRadius: 10, padding: '9px 12px',
+                fontSize: '0.74rem', color: 'rgba(255,255,255,0.45)',
+                lineHeight: 1.55, marginBottom: 2,
+              }}>
+                <Info size={13} color="#818cf8" style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  <strong style={{ color: 'rgba(255,255,255,0.65)' }}>Phone number required</strong> to book a station.
+                  If you signed up with Google, you&apos;ll be asked to add it before booking.
+                </span>
+              </div>
+            )}
+
             <button className="auth-google" onClick={handleGoogle} disabled={busy} type="button">
               {busy ? <Loader2 size={16} style={{ animation: 'auth-spin .7s linear infinite' }} /> : <GoogleIcon />}
               <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
@@ -227,21 +260,35 @@ export default function AuthPage() {
                 </div>
               </div>
 
-              {/* Phone — only on Register tab */}
+              {/* Phone — Register tab only */}
               {!isLogin && (
                 <div className="auth-field">
-                  <label htmlFor="auth-phone">Phone Number</label>
+                  <label htmlFor="auth-phone">
+                    Phone Number
+                    <span style={{
+                      marginLeft: 6, fontSize: '0.68rem',
+                      background: 'rgba(124,58,237,0.18)',
+                      color: '#c4b5fd', borderRadius: 4,
+                      padding: '1px 6px', fontWeight: 500,
+                    }}>Required for booking</span>
+                  </label>
                   <div className="auth-input-wrap">
                     <Phone size={15} className="auth-input-icon" />
                     <input
                       id="auth-phone"
                       type="tel"
-                      placeholder="+91 98765 43210"
+                      placeholder="98765 43210"
                       value={phone}
-                      onChange={e => setPhone(e.target.value)}
+                      onChange={e => { setPhone(e.target.value); setError(''); }}
                       autoComplete="tel"
                     />
                   </div>
+                  <p style={{
+                    fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)',
+                    marginTop: 4, paddingLeft: 2,
+                  }}>
+                    Indian mobile number (+91). Used only for booking confirmations.
+                  </p>
                 </div>
               )}
 
