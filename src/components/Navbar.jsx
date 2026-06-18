@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 
 const NAV_LINKS = [
@@ -29,12 +29,11 @@ function GZLogo() {
   );
 }
 
-export default function Navbar({ onAuthClick }) {
-  const [scrolled, setScrolled]   = useState(false);
-  const [mobileOpen, setMobile]   = useState(false);
-  const [activeIdx, setActiveIdx] = useState(null);
-  const barRef = useRef(null);
+export default function Navbar() {
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobile] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
 
   useEffect(() => {
@@ -48,16 +47,16 @@ export default function Navbar({ onAuthClick }) {
   const isActive = (href) =>
     href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
 
+  const goAuth = (mode) => { navigate(`/auth/${mode}`); setMobile(false); };
+
   return (
     <>
-      {/* Running-light top border */}
       <div className="navbar-border-light" />
 
       <header
         className={`navbar-root${scrolled ? ' navbar-scrolled' : ''}`}
         role="banner"
       >
-        {/* Animated scan line */}
         <div className="navbar-scan" />
 
         <div className="navbar-inner">
@@ -71,13 +70,11 @@ export default function Navbar({ onAuthClick }) {
 
           {/* Desktop nav */}
           <nav className="navbar-links" aria-label="Primary navigation">
-            {NAV_LINKS.map((link, i) => (
+            {NAV_LINKS.map((link) => (
               <Link
                 key={link.label}
                 to={link.href}
                 className={`navbar-link${isActive(link.href) ? ' navbar-link-active' : ''}`}
-                onMouseEnter={() => setActiveIdx(i)}
-                onMouseLeave={() => setActiveIdx(null)}
               >
                 {link.label}
                 <span className="navbar-link-bar" />
@@ -96,17 +93,21 @@ export default function Navbar({ onAuthClick }) {
                 <button
                   className="navbar-btn navbar-btn-ghost"
                   onClick={logout}
-                >Sign out</button>
+                >
+                  Sign out
+                </button>
               </>
             ) : (
               <>
                 <button
                   className="navbar-btn navbar-btn-ghost"
-                  onClick={() => onAuthClick?.('login')}
-                >Login</button>
+                  onClick={() => goAuth('login')}
+                >
+                  Login
+                </button>
                 <button
                   className="navbar-btn navbar-btn-primary"
-                  onClick={() => onAuthClick?.('register')}
+                  onClick={() => goAuth('register')}
                 >
                   <span className="navbar-btn-shine" />
                   Register
@@ -144,11 +145,26 @@ export default function Navbar({ onAuthClick }) {
           ))}
           <div className="mobile-auth-row">
             {user ? (
-              <button className="navbar-btn navbar-btn-ghost w-full" onClick={() => { logout(); setMobile(false); }}>Sign out</button>
+              <button
+                className="navbar-btn navbar-btn-ghost w-full"
+                onClick={() => { logout(); setMobile(false); }}
+              >
+                Sign out
+              </button>
             ) : (
               <>
-                <button className="navbar-btn navbar-btn-ghost" onClick={() => { onAuthClick?.('login'); setMobile(false); }}>Login</button>
-                <button className="navbar-btn navbar-btn-primary" onClick={() => { onAuthClick?.('register'); setMobile(false); }}>Register</button>
+                <button
+                  className="navbar-btn navbar-btn-ghost"
+                  onClick={() => goAuth('login')}
+                >
+                  Login
+                </button>
+                <button
+                  className="navbar-btn navbar-btn-primary"
+                  onClick={() => goAuth('register')}
+                >
+                  Register
+                </button>
               </>
             )}
           </div>
