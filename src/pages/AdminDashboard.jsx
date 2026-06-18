@@ -1,16 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck,
   Gamepad2, Zap, Clock, Star,
-  RefreshCw, CheckCircle2, AlertTriangle, Timer,
+  RefreshCw, CheckCircle2, AlertTriangle,
 } from 'lucide-react';
 import { signInWithPopup, signOut, GoogleAuthProvider } from 'firebase/auth';
 import useAuthStore from '../store/authStore';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
 import { auth, googleProvider } from '../lib/firebase';
-import { TTL_MINUTES } from '../lib/adminSlug';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
@@ -58,41 +57,6 @@ const StatCard = ({ label, value, Icon, glow }) => {
         </div>
       </div>
       <div className="sc-bar" />
-    </div>
-  );
-};
-
-const TtlBadge = ({ expiry, onExpired }) => {
-  const [remaining, setRemaining] = useState(() => Math.max(0, expiry - Date.now()));
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      const left = Math.max(0, expiry - Date.now());
-      setRemaining(left);
-      if (left === 0) { clearInterval(id); onExpired(); }
-    }, 1000);
-    return () => clearInterval(id);
-  }, [expiry, onExpired]);
-
-  const mins  = Math.floor(remaining / 60000);
-  const secs  = Math.floor((remaining % 60000) / 1000);
-  const label = `${mins}:${String(secs).padStart(2, '0')}`;
-  const pct   = remaining / (TTL_MINUTES * 60000);
-  const urgent = pct < 0.2;
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 7,
-      padding: '5px 12px', borderRadius: 8,
-      background: urgent ? 'rgba(239,68,68,0.12)' : 'rgba(168,85,247,0.10)',
-      border: `1px solid ${urgent ? 'rgba(239,68,68,0.35)' : 'rgba(168,85,247,0.3)'}`,
-      fontSize: '0.8rem', fontWeight: 700,
-      color: urgent ? '#fca5a5' : '#c4b5fd',
-      fontVariantNumeric: 'tabular-nums',
-      transition: 'all 0.5s ease',
-    }}>
-      <Timer size={13} style={{ flexShrink: 0 }} />
-      Session expires in {label}
     </div>
   );
 };
@@ -201,23 +165,15 @@ const StationRow = ({ station, index, oauthToken }) => {
 };
 
 export default function AdminDashboard() {
-  const user           = useAuthStore(s => s.user);
-  const setUser        = useAuthStore(s => s.setUser);
-  const oauthToken     = useAuthStore(s => s.oauthToken);
-  const setOauthToken  = useAuthStore(s => s.setOauthToken);
-  const clearAdminSlug = useAuthStore(s => s.clearAdminSlug);
-  const slugExpiry     = useAuthStore(s => s.slugExpiry);
+  const user          = useAuthStore(s => s.user);
+  const setUser       = useAuthStore(s => s.setUser);
+  const oauthToken    = useAuthStore(s => s.oauthToken);
+  const setOauthToken = useAuthStore(s => s.setOauthToken);
 
   const [loginBusy, setLoginBusy] = useState(false);
   const { stations, isLoading, isError, refetch } = useStationData();
   const navigate = useNavigate();
   const zapRef   = useRef(null);
-
-  // NOTE: Slug is generated in Navbar BEFORE navigation — do NOT re-generate here.
-  // Only register the cleanup: destroy slug when admin leaves the page.
-  useEffect(() => {
-    return () => clearAdminSlug();
-  }, []); // eslint-disable-line
 
   useEffect(() => {
     if (!zapRef.current) return;
@@ -229,13 +185,7 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [user]);
 
-  const handleExpired = useCallback(() => {
-    clearAdminSlug();
-    navigate('/', { replace: true });
-  }, [clearAdminSlug, navigate]);
-
   const handleLogout = async () => {
-    clearAdminSlug();
     await signOut(auth);
     useAuthStore.getState().clear();
     navigate('/', { replace: true });
@@ -266,9 +216,7 @@ export default function AdminDashboard() {
       <NeonBg />
       <Navbar />
 
-      {/* Push content below fixed navbar */}
       <main className="adm-body" style={{ paddingTop: 72 }}>
-
         <div className="adm-hdr">
           <div className="adm-hdr-l">
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
@@ -277,10 +225,7 @@ export default function AdminDashboard() {
               <p className="adm-sub">Live Google Sheets sync • {user.email}</p>
             </div>
           </div>
-          <div className="adm-hdr-r" style={{ gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {slugExpiry && (
-              <TtlBadge expiry={slugExpiry} onExpired={handleExpired} />
-            )}
+          <div className="adm-hdr-r">
             <button onClick={() => refetch()} className="adm-btn adm-btn-refresh">
               <RefreshCw size={14} /><span>Refresh</span>
             </button>
@@ -348,7 +293,6 @@ export default function AdminDashboard() {
             <div className="tbl-neon tbl-neon-bot" />
           </div>
         )}
-
       </main>
     </div>
   );

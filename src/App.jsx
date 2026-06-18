@@ -7,10 +7,11 @@ import AdminDashboard from './pages/AdminDashboard';
 import LandingPage from './pages/LandingPage';
 import GoogleProfileGate from './components/GoogleProfileGate';
 
-// ProtectedRoute: only checks auth + role.
-// Slug is generated BEFORE navigation (in Navbar), so it is always set by the time
-// AdminDashboard mounts. No slug check needed here — AdminDashboard itself owns the
-// TTL countdown and self-destructs when the slug expires.
+// The admin route path — comes from .env (VITE_ADMIN_SLUG).
+// Falls back to the literal string 'admin' if the env var is not set.
+// Set VITE_ADMIN_SLUG in your .env to something like 'admin-a3f9c2b7e1d6'
+export const ADMIN_PATH = import.meta.env.VITE_ADMIN_SLUG || 'admin';
+
 function ProtectedRoute({ children }) {
   const { user, role, loading } = useAuthStore();
   if (loading) return null;
@@ -21,7 +22,7 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   useAuthListener();
-  const { loading, adminSlug } = useAuthStore();
+  const { loading } = useAuthStore();
 
   if (loading) return (
     <div style={{
@@ -46,17 +47,15 @@ export default function App() {
         <Route path="/stations" element={<StationLayout />} />
         <Route path="/auth/:mode" element={<AuthPage />} />
 
-        {/* Dynamic slug route — registered once admin navigates via Navbar */}
-        {adminSlug && (
-          <Route
-            path={`/${adminSlug}`}
-            element={
-              <ProtectedRoute>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-        )}
+        {/* Stable admin route — path set by VITE_ADMIN_SLUG in .env */}
+        <Route
+          path={`/${ADMIN_PATH}`}
+          element={
+            <ProtectedRoute>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

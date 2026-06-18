@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import { createSlugSession } from '../lib/adminSlug';
+import { ADMIN_PATH } from '../App';
 
 const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
@@ -32,14 +32,13 @@ function GZLogo() {
 }
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobile] = useState(false);
+  const [scrolled, setScrolled]   = useState(false);
+  const [mobileOpen, setMobile]   = useState(false);
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { user, role, adminSlug, slugExpiry, setAdminSlug, logout } = useAuthStore();
+  const { user, role, logout }    = useAuthStore();
 
-  const isAdmin   = role === 'admin';
-  const slugAlive = adminSlug && slugExpiry && Date.now() < slugExpiry;
+  const isAdmin = role === 'admin';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -54,22 +53,10 @@ export default function Navbar() {
 
   const goAuth = (mode) => { navigate(`/auth/${mode}`); setMobile(false); };
 
-  // Called when admin clicks "Dashboard" button.
-  // Generates a fresh slug (or reuses alive one), stores it, then navigates.
   const handleDashboardClick = (e) => {
     e.preventDefault();
     setMobile(false);
-    if (slugAlive) {
-      // Slug still valid — just navigate to it
-      navigate(`/${adminSlug}`);
-    } else {
-      // Generate a brand-new slug session
-      const { slug, expiry } = createSlugSession();
-      setAdminSlug(slug, expiry);
-      // React Router registers the route on next render; use setTimeout to let
-      // the store update propagate before navigating.
-      setTimeout(() => navigate(`/${slug}`), 0);
-    }
+    navigate(`/${ADMIN_PATH}`);
   };
 
   return (
@@ -104,13 +91,12 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* Admin dashboard button — visible to any admin user, slug generated on click */}
             {isAdmin && (
               <a
                 href="#"
                 onClick={handleDashboardClick}
                 className={`navbar-link navbar-link-admin${
-                  slugAlive && adminSlug && isActive(`/${adminSlug}`) ? ' navbar-link-active' : ''
+                  isActive(`/${ADMIN_PATH}`) ? ' navbar-link-active' : ''
                 }`}
                 title="Admin Dashboard"
               >
@@ -137,25 +123,16 @@ export default function Navbar() {
                   )}
                   {user.email?.split('@')[0]}
                 </span>
-                <button
-                  className="navbar-btn navbar-btn-ghost"
-                  onClick={logout}
-                >
+                <button className="navbar-btn navbar-btn-ghost" onClick={logout}>
                   Sign out
                 </button>
               </>
             ) : (
               <>
-                <button
-                  className="navbar-btn navbar-btn-ghost"
-                  onClick={() => goAuth('login')}
-                >
+                <button className="navbar-btn navbar-btn-ghost" onClick={() => goAuth('login')}>
                   Login
                 </button>
-                <button
-                  className="navbar-btn navbar-btn-primary"
-                  onClick={() => goAuth('register')}
-                >
+                <button className="navbar-btn navbar-btn-primary" onClick={() => goAuth('register')}>
                   <span className="navbar-btn-shine" />
                   Register
                 </button>
@@ -192,11 +169,7 @@ export default function Navbar() {
           ))}
 
           {isAdmin && (
-            <a
-              href="#"
-              onClick={handleDashboardClick}
-              className="mobile-nav-link mobile-nav-admin"
-            >
+            <a href="#" onClick={handleDashboardClick} className="mobile-nav-link mobile-nav-admin">
               <LayoutDashboard size={14} style={{ display:'inline', marginRight:6, verticalAlign:'middle' }} />
               Dashboard
             </a>
@@ -204,26 +177,13 @@ export default function Navbar() {
 
           <div className="mobile-auth-row">
             {user ? (
-              <button
-                className="navbar-btn navbar-btn-ghost w-full"
-                onClick={() => { logout(); setMobile(false); }}
-              >
+              <button className="navbar-btn navbar-btn-ghost w-full" onClick={() => { logout(); setMobile(false); }}>
                 Sign out
               </button>
             ) : (
               <>
-                <button
-                  className="navbar-btn navbar-btn-ghost"
-                  onClick={() => goAuth('login')}
-                >
-                  Login
-                </button>
-                <button
-                  className="navbar-btn navbar-btn-primary"
-                  onClick={() => goAuth('register')}
-                >
-                  Register
-                </button>
+                <button className="navbar-btn navbar-btn-ghost" onClick={() => goAuth('login')}>Login</button>
+                <button className="navbar-btn navbar-btn-primary" onClick={() => goAuth('register')}>Register</button>
               </>
             )}
           </div>
