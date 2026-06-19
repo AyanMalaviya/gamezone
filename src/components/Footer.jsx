@@ -160,11 +160,11 @@ export default function Footer() {
           </div>
         </div>
 
-        <div class="gz-footer-bottom">
-          <span class="gz-footer-copy">
+        <div className="gz-footer-bottom">
+          <span className="gz-footer-copy">
             &copy; {year} GameZone. All rights reserved.
           </span>
-          <div class="gz-footer-legal">
+          <div className="gz-footer-legal">
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/terms">Terms &amp; Conditions</Link>
           </div>
