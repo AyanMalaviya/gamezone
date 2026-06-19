@@ -1,3 +1,11 @@
+/**
+ * StationCircle
+ *
+ * Visual circle on the floor-plan. When a booked slot is
+ * currently active (station.activeSlot != null) the circle
+ * shows red IN-USE with the active game name below it.
+ * If activeGame is null/empty, no game name is shown.
+ */
 const RACING_ID = '8';
 
 const S = {
@@ -55,14 +63,22 @@ const WheelIcon = () => (
 
 export default function StationCircle({ station, onClick }) {
   const isRacing = String(station.id) === RACING_ID;
-  const key = isRacing ? 'racing' : (station.status === 'available' ? 'available' : 'occupied');
+
+  // Derive display key:
+  // Racing station always shows amber.
+  // Other stations: if the sheet says occupied OR an activeSlot is live → occupied (red).
+  const isOccupied = station.status === 'occupied' || !!station.activeSlot;
+  const key = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
   const s = S[key];
+
+  // Only show game name when actively in a slot AND a game is specified
+  const gameLabel = station.activeSlot && station.activeGame ? station.activeGame : null;
 
   return (
     <button
       className="station-btn"
       onClick={() => onClick(station)}
-      title={`Station ${station.id} — ${s.text}`}
+      title={`Station ${station.id} — ${s.text}${gameLabel ? ` · ${gameLabel}` : ''}`}
     >
       {/* Circle */}
       <div
@@ -94,8 +110,17 @@ export default function StationCircle({ station, onClick }) {
         <div className="station-label" style={{ color: s.label }}>
           {s.text}
         </div>
-        {station.status === 'occupied' && station.currentGame && (
-          <div className="station-game">{station.currentGame}</div>
+        {/* Show active game under the circle (only when slot is live and game set) */}
+        {gameLabel && (
+          <div className="station-game" style={{
+            fontSize: 'clamp(0.48rem,0.85vw,0.6rem)',
+            color: 'rgba(255,255,255,0.55)',
+            textAlign: 'center',
+            maxWidth: 68,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>{gameLabel}</div>
         )}
       </div>
     </button>
