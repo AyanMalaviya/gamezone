@@ -4,12 +4,14 @@ import { LayoutDashboard, UserCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { ADMIN_PATH } from '../App';
 
+
 const PUBLIC_NAV = [
   { label:'Home',     href:'/' },
   { label:'Stations', href:'/stations' },
   { label:'Pricing',  href:'#pricing' },
   { label:'Contact',  href:'#contact' },
 ];
+
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -18,7 +20,9 @@ export default function Navbar() {
   const navigate  = useNavigate();
   const { user, role, phone, logout } = useAuthStore();
 
+
   const isAdmin = role === 'admin';
+
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 30);
@@ -26,17 +30,22 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+
   useEffect(() => { setMobile(false); }, [location.pathname]);
+
 
   const isActive = (href) =>
     href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
 
+
   const goAuth = (mode) => { navigate(`/auth/${mode}`); setMobile(false); };
+
 
   const handleDashboardClick = (e) => {
     e.preventDefault(); setMobile(false);
     navigate(`/${ADMIN_PATH}`);
   };
+
 
   return (
     <>
@@ -45,15 +54,20 @@ export default function Navbar() {
         <div className="navbar-scan" />
         <div className="navbar-inner">
 
+
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <img
               src="/favicon.ico"
-              alt="GameZone"
-              width="36"
-              height="36"
+              alt="GameZone logo"
+              width="32"
+              height="32"
               style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
             />
+            <span className="navbar-logo-text">
+              GAME<span className="navbar-logo-accent">ZONE</span>
+            </span>
           </Link>
+
 
           <nav className="navbar-links" aria-label="Primary navigation">
             {PUBLIC_NAV.map(link => (
@@ -71,6 +85,7 @@ export default function Navbar() {
               </a>
             )}
           </nav>
+
 
           <div className="navbar-auth">
             {user ? (
@@ -117,6 +132,7 @@ export default function Navbar() {
             )}
           </div>
 
+
           <button className="navbar-hamburger" onClick={() => setMobile(v=>!v)}
             aria-expanded={mobileOpen} aria-label="Toggle navigation">
             <span className={`ham-line${mobileOpen ? ' ham-open-1' : ''}`} />
@@ -125,6 +141,7 @@ export default function Navbar() {
           </button>
         </div>
       </header>
+
 
       <div className={`mobile-drawer${mobileOpen ? ' drawer-open' : ''}`} aria-hidden={!mobileOpen}>
         <div className="mobile-drawer-inner">
