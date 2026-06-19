@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Clock, Gamepad2, Zap, Monitor, Loader2, Trophy, Edit3, Check } from 'lucide-react';
+import { X, Clock, Gamepad2, Zap, Monitor, Loader2, Trophy, Edit3, Check, CreditCard } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import usePaymentStore from '../store/paymentStore';
 import CompleteProfileModal from './CompleteProfileModal';
 import { parseSlot, toAmPm, nowMinutes, getNextSlot } from '../lib/slotUtils';
 
@@ -67,7 +68,6 @@ function fmtSlot(slotStr) {
 export default function StationModal({ station, onClose, onGameUpdate }) {
   const [loading, setLoading]     = useState(false);
   const [phoneGate, setPhoneGate] = useState(false);
-  // Game-edit state
   const [editing, setEditing]     = useState(false);
   const [gameInput, setGameInput] = useState('');
   const [saving, setSaving]       = useState(false);
@@ -76,10 +76,10 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
   const user  = useAuthStore(s => s.user);
   const phone = useAuthStore(s => s.phone);
   const navigate = useNavigate();
+  const openPayment = usePaymentStore(s => s.openPayment);
 
   useEffect(() => { injectKeyframes(); }, []);
 
-  /* Simulate a brief 350ms "fetch" feel when station changes */
   useEffect(() => {
     if (!station) return;
     setLoading(true);
@@ -96,35 +96,36 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
   const key = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
   const cfg = statusConfig[key];
 
-  // All future + current slots (already cleaned by scheduler on public page via refetch)
   const now = nowMinutes();
   const slots = Array.isArray(station.bookedSlots)
     ? station.bookedSlots.filter(Boolean)
     : String(station.bookedSlots ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
-  // Active slot (if any)
   const activeSlot = station.activeSlot ?? null;
-  // Next upcoming slot
   const nextSlot = getNextSlot(slots, now);
 
-  // Future slots only (not currently active, not expired)
   const futureSlots = slots.filter(s => {
     const p = parseSlot(s);
     if (!p) return false;
     return p.startMin > now;
   });
 
-  // The game currently being played (from activeGame enrichment)
   const liveGame = station.activeGame || null;
-
-  // Can the logged-in user edit the game?
-  // They can if they are logged in (phone number is their ID)
   const canEdit = !!user && !!phone && !!activeSlot;
 
   const handleBook = () => {
     if (!user) { onClose(); navigate('/auth/login'); return; }
     if (!phone) { setPhoneGate(true); return; }
-    /* TODO: open actual booking flow */
+    // Open UPI payment modal
+    const stationName = isRacing ? 'Racing Simulator' : `PS5 Station ${station.id}`;
+    const ratePerHour = isRacing ? 250 : 100;
+    openPayment({
+      type: 'booking',
+      label: `${stationName} — 1 Hour`,
+      amount: ratePerHour,
+      meta: { stationId: station.id, isRacing },
+    });
+    onClose();
   };
 
   const handleSaveGame = async () => {
@@ -272,7 +273,6 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       border:'1px solid rgba(239,68,68,0.28)',
                       animation:'sm-slot-in 0.25s ease both',
                     }}>
-                      {/* Pulsing live dot */}
                       <span style={{ position:'relative', width:10, height:10, flexShrink:0 }}>
                         <span style={{
                           position:'absolute', inset:0, borderRadius:'50%',
@@ -295,7 +295,6 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                         )}
                       </div>
 
-                      {/* Edit game button (logged-in booker only) */}
                       {canEdit && !editing && (
                         <button
                           onClick={() => { setGameInput(liveGame ?? ''); setEditing(true); }}
@@ -348,7 +347,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       >
                         {saving
                           ? <Loader2 size={13} style={{ animation:'sm-spin .7s linear infinite' }} />
-                          : saveOk ? <Check size={13} /> : <Check size={13} />
+                          : <Check size={13} />
                         }
                         {saving ? 'Saving…' : 'Save'}
                       </button>
@@ -416,7 +415,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     )}
                   </div>
 
-                  {/* ── Currently Playing (from Sheets, no active slot) ── */}
+                  {/* ── Currently Playing ── */}
                   {!activeSlot && station.currentGame && (
                     <div style={{ marginBottom: station.preferredGame ? 16 : 0 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
@@ -432,4 +431,69 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                         background:'rgba(239,68,68,0.07)',
                         border:'1px solid rgba(239,68,68,0.18)',
                         fontSize:'0.88rem', fontWeight:600, color:'#fca5a5',
-                        display:'flex', alignItems:'center
+                        display:'flex', alignItems:'center', gap:8,
+                      }}>
+                        <Gamepad2 size={14} />
+                        {station.currentGame}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Divider ── */}
+                  <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'16px 0' }} />
+
+                  {/* ── Book / Pay button ── */}
+                  {!isOccupied && (
+                    <button
+                      onClick={handleBook}
+                      style={{
+                        width:'100%', padding:'13px',
+                        borderRadius:11, border:'none',
+                        background: isRacing
+                          ? 'linear-gradient(135deg,#d97706,#f59e0b)'
+                          : 'linear-gradient(135deg,#7c3aed,#a855f7)',
+                        color:'#fff', fontSize:'0.95rem', fontWeight:700,
+                        cursor:'pointer', letterSpacing:'0.04em',
+                        fontFamily:"'Rajdhani','Inter',sans-serif",
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                        boxShadow: isRacing
+                          ? '0 4px 20px rgba(217,119,6,0.35)'
+                          : '0 4px 20px rgba(124,58,237,0.35)',
+                        transition:'opacity .15s, transform .15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)'; }}
+                    >
+                      <CreditCard size={16} />
+                      Book &amp; Pay ₹{isRacing ? '250' : '100'} via UPI
+                    </button>
+                  )}
+
+                  {isOccupied && (
+                    <div style={{
+                      padding:'11px 14px', borderRadius:10,
+                      background:'rgba(239,68,68,0.07)',
+                      border:'1px solid rgba(239,68,68,0.16)',
+                      fontSize:'0.82rem', color:'rgba(239,68,68,0.75)',
+                      textAlign:'center',
+                    }}>
+                      Station is currently occupied. Check back soon!
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {phoneGate && (
+        <CompleteProfileModal
+          open={phoneGate}
+          onClose={() => setPhoneGate(false)}
+          onSuccess={() => setPhoneGate(false)}
+        />
+      )}
+    </>
+  );
+}
