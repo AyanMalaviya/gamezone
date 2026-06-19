@@ -1,21 +1,33 @@
-import { useAuth } from "../hooks/useAuth";
-import { Navigate } from "react-router-dom";
+import useAuthStore from '../store/authStore';
+import { Navigate } from 'react-router-dom';
 
-// Wraps admin-only routes. Redirects to / if not logged in.
+/**
+ * AuthGuard — wraps /auth/login and /auth/register.
+ * If the user is ALREADY logged in, redirect them to home (no need to see login).
+ * If NOT logged in, render the auth page normally.
+ */
 export default function AuthGuard({ children }) {
-  const { user, loading } = useAuth();
+  const user    = useAuthStore(s => s.user);
+  const loading = useAuthStore(s => s.loading);
 
+  // While Firebase is resolving auth state, show nothing (avoids flash)
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <span className="text-gray-400 text-sm">Loading...</span>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        minHeight: '100vh', background: '#09090d',
+        color: 'rgba(255,255,255,0.35)', fontSize: '0.85rem',
+      }}>
+        Loading…
       </div>
     );
   }
 
-  if (!user) {
+  // Already authenticated → send home
+  if (user && user.emailVerified) {
     return <Navigate to="/" replace />;
   }
 
+  // Not logged in → show login/register page
   return children;
 }
