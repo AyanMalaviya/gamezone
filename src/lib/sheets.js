@@ -12,7 +12,7 @@
  *   H  Preferred Game     (blank if none)
  *
  * Row 1  = header  (skipped on read)
- * Row 18 = guide   (skipped — id will be non-numeric)
+ * Guide row = skipped (id will be non-numeric or duplicate)
  */
 
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -51,8 +51,6 @@ const parseBookedSlots = (value) =>
 /**
  * mapStationRow — maps a raw Sheets row array to a station object.
  * Columns A–H (indices 0–7).
- * Rows where column A is not a valid number (e.g. header, guide row) are filtered out
- * by getStations() before reaching this function.
  */
 const mapStationRow = (row = []) => ({
   id:            String(row[0] ?? '').trim(),
@@ -62,14 +60,13 @@ const mapStationRow = (row = []) => ({
   activeSlot:    (() => {
     const raw = String(row[4] ?? '').trim();
     if (!raw) return null;
-    // parse "HH:MM-HH:MM" → { start24, end24 }
     const m = raw.match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/);
     return m ? { start24: m[1], end24: m[2] } : null;
   })(),
   bookedSlots:   parseBookedSlots(row[5]),
   currentGame:   String(row[6] ?? '').trim(),
   preferredGame: String(row[7] ?? '').trim(),
-  activeGame:    String(row[6] ?? '').trim(), // alias used by StationModal
+  activeGame:    String(row[6] ?? '').trim(),
 });
 
 const serializeBookedSlots = (value) =>
@@ -92,12 +89,23 @@ export const getStations = async () => {
   const data = await res.json();
   const rows = data?.values ?? [];
 
-  // Skip row 0 (header). Also skip any row where column A is not a valid number
-  // (catches the guide row and any blank rows at the bottom).
-  return rows
+  // Skip header row, filter out non-numeric IDs (guide rows, blank rows)
+  const validRows = rows
     .slice(1)
-    .filter(row => row && row[0] && !isNaN(Number(String(row[0]).trim())))
-    .map(mapStationRow);
+    .filter(row => row && row[0] && !isNaN(Number(String(row[0]).trim())));
+
+  // Deduplicate by station ID — keep only the first occurrence of each ID
+  const seen = new Set();
+  const unique = [];
+  for (const row of validRows) {
+    const id = String(row[0]).trim();
+    if (!seen.has(id)) {
+      seen.add(id);
+      unique.push(row);
+    }
+  }
+
+  return unique.map(mapStationRow);
 };
 
 /**
@@ -107,11 +115,6 @@ export const getStations = async () => {
  *                            Station ID 1 → rowIndex 0 → sheet row 2.
  * @param {object} data       Station fields to write.
  * @param {string} oauthToken Google OAuth2 access token (requires spreadsheets scope).
- *
- * Common errors:
- *  403 PERMISSION_DENIED        → Sheets API not enabled, or wrong OAuth scope.
- *  403 insufficientPermissions  → token missing spreadsheets scope; re-sign-in.
- *  401 Invalid Credentials      → token expired; sign out and sign in again.
  */
 export const updateStation = async (rowIndex, data, oauthToken) => {
   if (!oauthToken) {
@@ -121,7 +124,7 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
   }
 
   if (import.meta.env.DEV) {
-    console.info('[sheets] oauthToken prefix:', oauthToken.slice(0, 12) + '\u2026');
+    console.info('[sheets] oauthToken prefix:', oauthToken.slice(0, 12) + '…');
   }
 
   const { sheetId } = getSheetsEnv();
@@ -135,14 +138,14 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
 
   const range  = `${sheetTitle}!A${sheetRow}:H${sheetRow}`;
   const values = [[
-    data?.id            ?? '',          // A — Station ID
-    data?.stationName   ?? '',          // B — Station Name
-    data?.stationType   ?? 'ps5',       // C — Type
-    data?.status        ?? 'available', // D — Status
-    serializeActiveSlot(data?.activeSlot),  // E — Active Slot
-    serializeBookedSlots(data?.bookedSlots), // F — Booked Slots
-    data?.currentGame   ?? '',          // G — Current Game
-    data?.preferredGame ?? '',          // H — Preferred Game
+    data?.id            ?? '',
+    data?.stationName   ?? '',
+    data?.stationType   ?? 'ps5',
+    data?.status        ?? 'available',
+    serializeActiveSlot(data?.activeSlot),
+    serializeBookedSlots(data?.bookedSlots),
+    data?.currentGame   ?? '',
+    data?.preferredGame ?? '',
   ]];
 
   const res = await fetch(
@@ -166,7 +169,7 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
       if (status === 'PERMISSION_DENIED' || message.includes('disabled')) {
         throw new Error(
           `Google Sheets API is not enabled for this project. ` +
-          `Go to console.cloud.google.com \u2192 APIs & Services \u2192 Enable \u201cGoogle Sheets API\u201d. ` +
+          `Go to console.cloud.google.com → APIs & Services → Enable “Google Sheets API”. ` +
           `(${message})`
         );
       }
