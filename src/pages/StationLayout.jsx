@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import useStationData from '../hooks/useStationData';
+import useSlotScheduler from '../hooks/useSlotScheduler';
+import useAuthStore from '../store/authStore';
 import StationCircle from '../components/StationCircle';
 import StationModal from '../components/StationModal';
 import Navbar from '../components/Navbar';
@@ -20,9 +22,16 @@ function SkeletonRow({ count }) {
 }
 
 export default function StationLayout() {
-  const { stations, isLoading, isError } = useStationData();
-  // selected = { station, stationIndex } so modal always gets the correct row index
+  const { stations, isLoading, isError, refetch } = useStationData();
   const [selected, setSelected] = useState(null);
+
+  // Pull OAuth token from auth store — present only for signed-in Google users.
+  // Without it the scheduler runs in read-only mode (UI still correct via enrichStation).
+  const oauthToken = useAuthStore(s => s.oauthToken ?? null);
+
+  // Automated availability: marks stations occupied/available based on IST time.
+  // Writes to Google Sheets when oauthToken is available, refetches otherwise.
+  useSlotScheduler(stations, refetch, oauthToken);
 
   const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
   const rowTop    = sorted.filter(s => Number(s.id) >= 1 && Number(s.id) <= 7);
@@ -32,8 +41,6 @@ export default function StationLayout() {
   const available = stations.filter(s => s.status === 'available' && Number(s.id) !== 8).length;
   const occupied  = stations.filter(s => s.status === 'occupied'  && Number(s.id) !== 8).length;
 
-  // Pass both station and its 0-based index in sorted[] to the modal.
-  // This is the row index used by updateStation() for Sheets writes.
   const handleSelect = (station) => {
     const stationIndex = sorted.findIndex(s => s.id === station.id);
     setSelected({ station, stationIndex });
@@ -159,7 +166,7 @@ export default function StationLayout() {
             textAlign:'center', marginTop:14,
             fontSize:'0.62rem', color:'rgba(255,255,255,0.16)', letterSpacing:'0.06em',
           }}>
-            Auto-refreshes every 30 seconds
+            Auto-refreshes every 30s · Availability syncs to IST time
           </p>
         </div>
       </main>
