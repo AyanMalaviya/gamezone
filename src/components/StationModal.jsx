@@ -46,7 +46,18 @@ const statusConfig = {
   },
 };
 
-const RACING_ID = '8';
+/**
+ * Station 8 is the Racing Simulator.
+ * Detection: id === '8'  OR  stationType === 'racing' (sheet column F).
+ * Both conditions should be true in normal operation.
+ */
+const isRacingStation = (station) =>
+  String(station?.id) === '8' ||
+  String(station?.stationType).toLowerCase() === 'racing';
+
+/* ── Pricing ── */
+const PRICE_RACING = 250;  // ₹ per hour
+const PRICE_PS5    = 100;  // ₹ per hour
 
 /* Skeleton row */
 const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
@@ -62,7 +73,7 @@ const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
 function fmtSlot(slotStr) {
   const p = parseSlot(slotStr);
   if (!p) return slotStr;
-  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
 }
 
 export default function StationModal({ station, onClose, onGameUpdate }) {
@@ -91,7 +102,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
 
   if (!station) return null;
 
-  const isRacing   = String(station.id) === RACING_ID;
+  const isRacing   = isRacingStation(station);
   const isOccupied = station.status?.toLowerCase() === 'occupied' || !!station.activeSlot;
   const key = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
   const cfg = statusConfig[key];
@@ -102,7 +113,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
     : String(station.bookedSlots ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
   const activeSlot = station.activeSlot ?? null;
-  const nextSlot = getNextSlot(slots, now);
+  const nextSlot   = getNextSlot(slots, now);
 
   const futureSlots = slots.filter(s => {
     const p = parseSlot(s);
@@ -111,19 +122,35 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
   });
 
   const liveGame = station.activeGame || null;
-  const canEdit = !!user && !!phone && !!activeSlot;
+  const canEdit  = !!user && !!phone && !!activeSlot;
 
   const handleBook = () => {
     if (!user) { onClose(); navigate('/auth/login'); return; }
     if (!phone) { setPhoneGate(true); return; }
-    // Open UPI payment modal
-    const stationName = isRacing ? 'Racing Simulator' : `PS5 Station ${station.id}`;
-    const ratePerHour = isRacing ? 250 : 100;
+
+    const stationName  = isRacing ? 'Racing Simulator' : `PS5 Station ${station.id}`;
+    const ratePerHour  = isRacing ? PRICE_RACING : PRICE_PS5;
+
     openPayment({
-      type: 'booking',
-      label: `${stationName} — 1 Hour`,
+      type:   'booking',
+      label:  `${stationName} \u2014 1 Hour`,
       amount: ratePerHour,
-      meta: { stationId: station.id, isRacing },
+      meta: {
+        uid:           user?.uid ?? null,
+        stationId:     station.id,
+        stationName,
+        stationIndex:  Number(station.id) - 1,  // 0-based row index for Sheets updateStation()
+        stationType:   station.stationType || (isRacing ? 'racing' : 'ps5'),
+        slot:          nextSlot ? `${nextSlot.start24}-${nextSlot.end24}` : '',
+        game:          station.preferredGame || station.currentGame || '',
+        currentGame:   station.currentGame  || '',
+        preferredGame: station.preferredGame || '',
+        bookedSlots:   slots,
+        isRacing,
+        // oauthToken is injected by AdminDashboard when it opens the payment modal.
+        // For regular user bookings it remains undefined — Sheets update is skipped.
+        oauthToken: undefined,
+      },
     });
     onClose();
   };
@@ -146,7 +173,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
       <Dialog.Root open={!!station} onOpenChange={open => !open && onClose()}>
         <Dialog.Portal>
 
-          {/* ── Overlay ── */}
+          {/* \u2500\u2500 Overlay \u2500\u2500 */}
           <Dialog.Overlay
             style={{
               position: 'fixed', inset: 0,
@@ -158,7 +185,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
             }}
           />
 
-          {/* ── Modal ── */}
+          {/* \u2500\u2500 Modal \u2500\u2500 */}
           <Dialog.Content
             aria-describedby={undefined}
             onEscapeKeyDown={onClose}
@@ -189,7 +216,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
 
             <div style={{ padding: '22px 22px 26px' }}>
 
-              {/* ── Header ── */}
+              {/* \u2500\u2500 Header \u2500\u2500 */}
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18, gap:12 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:13 }}>
                   <div style={{
@@ -212,7 +239,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       fontWeight:700, fontSize:'1.18rem',
                       color:'#fff', lineHeight:1.2, marginBottom:5,
                     }}>
-                      {isRacing ? '🏁 Racing Simulator' : `PS5 Station ${station.id}`}
+                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : `PS5 Station ${station.id}`}
                     </Dialog.Title>
 
                     <span style={{
@@ -264,7 +291,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                 </div>
               ) : (
                 <>
-                  {/* ── LIVE NOW banner ── */}
+                  {/* \u2500\u2500 LIVE NOW banner \u2500\u2500 */}
                   {activeSlot && (
                     <div style={{
                       display:'flex', alignItems:'center', gap:10,
@@ -286,11 +313,11 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       </span>
                       <div>
                         <div style={{ fontSize:'0.68rem', fontWeight:700, color:'#f87171', letterSpacing:'0.1em' }}>
-                          LIVE NOW · {toAmPm(activeSlot.start24)} – {toAmPm(activeSlot.end24)}
+                          LIVE NOW \u00b7 {toAmPm(activeSlot.start24)} \u2013 {toAmPm(activeSlot.end24)}
                         </div>
                         {liveGame && (
                           <div style={{ fontSize:'0.82rem', color:'#fca5a5', marginTop:2 }}>
-                            🎮 {liveGame}
+                            \uD83C\uDFAE {liveGame}
                           </div>
                         )}
                       </div>
@@ -314,7 +341,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     </div>
                   )}
 
-                  {/* ── Inline game editor ── */}
+                  {/* \u2500\u2500 Inline game editor \u2500\u2500 */}
                   {editing && (
                     <div style={{
                       display:'flex', gap:7, marginBottom:14,
@@ -325,7 +352,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                         value={gameInput}
                         onChange={e => setGameInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') handleSaveGame(); if (e.key === 'Escape') setEditing(false); }}
-                        placeholder="Enter game name…"
+                        placeholder="Enter game name\u2026"
                         style={{
                           flex:1, padding:'8px 12px', borderRadius:8,
                           background:'rgba(255,255,255,0.06)',
@@ -349,7 +376,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                           ? <Loader2 size={13} style={{ animation:'sm-spin .7s linear infinite' }} />
                           : <Check size={13} />
                         }
-                        {saving ? 'Saving…' : 'Save'}
+                        {saving ? 'Saving\u2026' : 'Save'}
                       </button>
                       <button
                         onClick={() => setEditing(false)}
@@ -359,11 +386,11 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                           border:'1px solid rgba(255,255,255,0.1)',
                           color:'rgba(255,255,255,0.5)', cursor:'pointer', fontSize:'0.8rem',
                         }}
-                      >✕</button>
+                      >\u2715</button>
                     </div>
                   )}
 
-                  {/* ── Upcoming Slots ── */}
+                  {/* \u2500\u2500 Upcoming Slots \u2500\u2500 */}
                   <div style={{ marginBottom:18 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
                       <Clock size={13} color="rgba(255,255,255,0.35)" />
@@ -383,7 +410,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                         display:'flex', alignItems:'center', gap:8,
                       }}>
                         <Zap size={14} />
-                        {slots.length === 0 ? 'No bookings — walk in anytime!' : 'No more slots today'}
+                        {slots.length === 0 ? 'No bookings \u2014 walk in anytime!' : 'No more slots today'}
                       </div>
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
@@ -415,7 +442,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     )}
                   </div>
 
-                  {/* ── Currently Playing ── */}
+                  {/* \u2500\u2500 Currently Playing \u2500\u2500 */}
                   {!activeSlot && station.currentGame && (
                     <div style={{ marginBottom: station.preferredGame ? 16 : 0 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
@@ -439,10 +466,10 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     </div>
                   )}
 
-                  {/* ── Divider ── */}
+                  {/* \u2500\u2500 Divider \u2500\u2500 */}
                   <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'16px 0' }} />
 
-                  {/* ── Book / Pay button ── */}
+                  {/* \u2500\u2500 Book / Pay button \u2500\u2500 */}
                   {!isOccupied && (
                     <button
                       onClick={handleBook}
@@ -465,7 +492,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)'; }}
                     >
                       <CreditCard size={16} />
-                      Book &amp; Pay ₹{isRacing ? '250' : '100'} via UPI
+                      Book &amp; Pay \u20b9{isRacing ? PRICE_RACING : PRICE_PS5} via UPI
                     </button>
                   )}
 
