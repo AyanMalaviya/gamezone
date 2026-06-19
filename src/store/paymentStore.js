@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { updateStation } from '../lib/sheets';
+import { updateStation, appendBookingToSheet } from '../lib/sheets';
+import useAuthStore from './authStore';
 
-/* ─── Test UPI IDs that always succeed in sandbox ─── */
+/* ─── Test UPI IDs ─── */
 export const TEST_UPI_IDS = [
   'success@upi',
   'test@paytm',
@@ -11,7 +12,7 @@ export const TEST_UPI_IDS = [
   'sandbox@phonepe',
 ];
 
-/* ─── Simulate UPI payment (no real money moves) ─── */
+/* ─── Simulate UPI payment ─── */
 async function simulateUpiPayment({ upiId, amount, orderId }) {
   if (!upiId || !upiId.includes('@')) throw new Error('Invalid UPI ID format. Must contain @');
   await new Promise(r => setTimeout(r, 800 + Math.random() * 1400));
@@ -31,7 +32,7 @@ async function simulateUpiPayment({ upiId, amount, orderId }) {
 
 /* ─── Persist booking to Firestore ─── */
 async function saveBookingToFirestore(uid, context, receipt) {
-  if (!uid) return; // not logged in — skip silently
+  if (!uid) return;
   try {
     const meta = context.meta ?? {};
     await addDoc(collection(db, 'bookings'), {
@@ -40,6 +41,7 @@ async function saveBookingToFirestore(uid, context, receipt) {
       stationName:      meta.stationName ?? context.label ?? '',
       stationType:      meta.stationType ?? 'ps5',
       slot:             meta.slot        ?? '',
+      hours:            meta.hours       ?? 1,
       game:             meta.game        ?? '',
       amount:           receipt.amount,
       txnId:            receipt.txnId,
@@ -54,44 +56,42 @@ async function saveBookingToFirestore(uid, context, receipt) {
   }
 }
 
-/* ─── Update Google Sheets after payment ───
- *
- * Writes the full 8-column row back to Sheets:
- *   A  id            B  stationName   C  stationType
- *   D  status        E  activeSlot    F  bookedSlots
- *   G  currentGame   H  preferredGame
+/* ─── Update station row in Sheets after payment ───
+ * Reads oauthToken directly from Zustand — no longer relies on context.meta.oauthToken.
  */
 async function updateSheetsAfterPayment(context, oauthToken) {
-  if (!oauthToken) return;
+  if (!oauthToken) {
+    if (import.meta.env.DEV) console.warn('[paymentStore] updateSheetsAfterPayment: no OAuth token, skipping.');
+    return;
+  }
   const meta = context.meta ?? {};
   const { stationIndex } = meta;
   if (stationIndex == null) return;
 
   try {
-    // Add the newly booked slot to the existing bookedSlots list
     const existingSlots = Array.isArray(meta.bookedSlots) ? meta.bookedSlots : [];
     const updatedSlots  = meta.slot
       ? [...new Set([...existingSlots, meta.slot])]
       : existingSlots;
 
     await updateStation(stationIndex, {
-      id:            meta.stationId    ?? '',
-      stationName:   meta.stationName  ?? '',
-      stationType:   meta.stationType  ?? 'ps5',
+      id:            meta.stationId     ?? '',
+      stationName:   meta.stationName   ?? '',
+      stationType:   meta.stationType   ?? 'ps5',
       status:        'occupied',
-      activeSlot:    meta.slot         ?? null,
+      activeSlot:    meta.slot          ?? null,
       bookedSlots:   updatedSlots,
-      currentGame:   meta.game         ?? '',
+      currentGame:   meta.game          ?? '',
       preferredGame: meta.preferredGame ?? '',
     }, oauthToken);
   } catch (err) {
-    console.warn('[paymentStore] Sheets update after payment failed:', err.message);
+    console.warn('[paymentStore] Sheets station update failed:', err.message);
   }
 }
 
 const usePaymentStore = create((set, get) => ({
   isOpen:  false,
-  context: null,   // { type, label, amount, meta: { uid, stationId, stationIndex, stationName, stationType, slot, game, bookedSlots, preferredGame, oauthToken } }
+  context: null,
   step:    'form',
   receipt: null,
   error:   null,
@@ -104,6 +104,10 @@ const usePaymentStore = create((set, get) => ({
     const { context } = get();
     if (!context) return;
 
+    // ✔ Read oauthToken from Zustand store — works for both Google and email users
+    const oauthToken = useAuthStore.getState().oauthToken;
+    const uid        = useAuthStore.getState().user?.uid ?? context.meta?.uid ?? null;
+
     const orderId = 'ORD-' + Date.now();
     set({ step: 'processing', error: null });
 
@@ -111,12 +115,23 @@ const usePaymentStore = create((set, get) => ({
       const receipt = await simulateUpiPayment({ upiId, amount: context.amount, orderId });
 
       // 1. Save booking to Firestore (non-blocking)
-      saveBookingToFirestore(context.meta?.uid ?? null, context, receipt);
+      saveBookingToFirestore(uid, context, receipt);
 
-      // 2. Update Google Sheets (non-blocking)
-      if (context.meta?.oauthToken) {
-        updateSheetsAfterPayment(context, context.meta.oauthToken);
-      }
+      // 2. Update station row in Google Sheets (non-blocking)
+      updateSheetsAfterPayment(context, oauthToken);
+
+      // 3. Append booking log row to Sheets Bookings tab (non-blocking)
+      appendBookingToSheet({
+        txnId:       receipt.txnId,
+        uid:         uid ?? '',
+        stationName: context.meta?.stationName ?? context.label ?? '',
+        slot:        context.meta?.slot        ?? '',
+        hours:       context.meta?.hours       ?? 1,
+        amount:      receipt.amount,
+        upiId:       receipt.upiId,
+        bank:        receipt.bank,
+        status:      'SUCCESS',
+      }, oauthToken);
 
       set(s => ({ step: 'success', receipt, history: [receipt, ...s.history] }));
     } catch (err) {

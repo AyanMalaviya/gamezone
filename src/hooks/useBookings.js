@@ -3,18 +3,11 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../lib/firebase';
 
 /**
- * useBookings — real-time listener for the current user's bookings.
- * Returns { bookings, loading, error }.
+ * useBookings — real-time listener for a single user's bookings.
+ * Pass uid to filter by user. Returns { bookings, loading, error }.
  *
- * Requires a Firestore composite index on the `bookings` collection:
- *   Fields: uid (ASC), bookedAt (DESC)
- *
- * If you see an error about a missing index, click the link in the
- * browser console — Firebase will open the index creation page directly.
- * Or create it manually in Firebase Console → Firestore → Indexes:
- *   Collection: bookings
- *   uid:      Ascending
- *   bookedAt: Descending
+ * Requires a Firestore composite index:
+ *   Collection: bookings  |  uid: ASC  |  bookedAt: DESC
  */
 export default function useBookings(uid) {
   const [bookings, setBookings] = useState([]);
@@ -38,8 +31,6 @@ export default function useBookings(uid) {
       },
       (err) => {
         console.error('[useBookings] Firestore error:', err.message);
-        // If this is a missing index error, the console will contain a direct
-        // link to create the index in Firebase Console.
         setError(err.message);
         setLoading(false);
       },
@@ -47,6 +38,43 @@ export default function useBookings(uid) {
 
     return unsub;
   }, [uid]);
+
+  return { bookings, loading, error };
+}
+
+/**
+ * useAllBookings — admin-only real-time listener for ALL bookings across all users.
+ * Ordered by bookedAt desc so newest appear first.
+ *
+ * Requires a single-field index on bookedAt (DESC) in Firestore.
+ * Firebase usually creates this automatically.
+ */
+export function useAllBookings() {
+  const [bookings, setBookings] = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'bookings'),
+      orderBy('bookedAt', 'desc'),
+    );
+
+    const unsub = onSnapshot(q,
+      (snap) => {
+        setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        console.error('[useAllBookings] Firestore error:', err.message);
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+
+    return unsub;
+  }, []);
 
   return { bookings, loading, error };
 }
