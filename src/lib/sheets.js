@@ -10,9 +10,6 @@
  *   F  Booked Slots       (comma-separated "HH:MM-HH:MM, HH:MM-HH:MM")
  *   G  Current Game       (blank if none)
  *   H  Preferred Game     (blank if none)
- *
- * Row 1  = header  (skipped on read)
- * Guide row = skipped (id will be non-numeric or duplicate)
  */
 
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -49,14 +46,19 @@ const parseBookedSlots = (value) =>
   value ? String(value).split(',').map(s => s.trim()).filter(Boolean) : [];
 
 /**
- * mapStationRow — maps a raw Sheets row array to a station object.
- * Columns A–H (indices 0–7).
+ * Normalise status string — treat "free", blank, or unknown values as "available".
  */
+const normaliseStatus = (raw) => {
+  const s = String(raw ?? '').trim().toLowerCase();
+  if (s === 'occupied') return 'occupied';
+  return 'available'; // covers "free", "", "available", anything else
+};
+
 const mapStationRow = (row = []) => ({
   id:            String(row[0] ?? '').trim(),
   stationName:   String(row[1] ?? '').trim(),
   stationType:   String(row[2] ?? '').trim().toLowerCase() || 'ps5',
-  status:        String(row[3] ?? '').trim().toLowerCase() || 'available',
+  status:        normaliseStatus(row[3]),
   activeSlot:    (() => {
     const raw = String(row[4] ?? '').trim();
     if (!raw) return null;
@@ -89,39 +91,23 @@ export const getStations = async () => {
   const data = await res.json();
   const rows = data?.values ?? [];
 
-  // Skip header row, filter out non-numeric IDs (guide rows, blank rows)
   const validRows = rows
     .slice(1)
     .filter(row => row && row[0] && !isNaN(Number(String(row[0]).trim())));
 
-  // Deduplicate by station ID — keep only the first occurrence of each ID
+  // Deduplicate by station ID — keep first occurrence
   const seen = new Set();
   const unique = [];
   for (const row of validRows) {
     const id = String(row[0]).trim();
-    if (!seen.has(id)) {
-      seen.add(id);
-      unique.push(row);
-    }
+    if (!seen.has(id)) { seen.add(id); unique.push(row); }
   }
 
   return unique.map(mapStationRow);
 };
 
-/**
- * updateStation — writes one row back to the sheet via OAuth2.
- *
- * @param {number} rowIndex   0-based index into the DATA rows (after header).
- *                            Station ID 1 → rowIndex 0 → sheet row 2.
- * @param {object} data       Station fields to write.
- * @param {string} oauthToken Google OAuth2 access token (requires spreadsheets scope).
- */
 export const updateStation = async (rowIndex, data, oauthToken) => {
-  if (!oauthToken) {
-    throw new Error(
-      'No OAuth token found. Please sign out and sign in again to grant Sheets write access.'
-    );
-  }
+  if (!oauthToken) throw new Error('No OAuth token found. Please sign out and sign in again.');
 
   if (import.meta.env.DEV) {
     console.info('[sheets] oauthToken prefix:', oauthToken.slice(0, 12) + '…');
@@ -129,12 +115,10 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
 
   const { sheetId } = getSheetsEnv();
   const sheetTitle  = await getSheetTitle();
-  // +2: row 1 is the header; Sheets rows are 1-indexed
   const sheetRow    = Number(rowIndex) + 2;
 
-  if (!Number.isInteger(sheetRow) || sheetRow < 2) {
+  if (!Number.isInteger(sheetRow) || sheetRow < 2)
     throw new Error('rowIndex must be a valid zero-based data row index.');
-  }
 
   const range  = `${sheetTitle}!A${sheetRow}:H${sheetRow}`;
   const values = [[
@@ -151,11 +135,8 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
   const res = await fetch(
     `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
     {
-      method:  'PUT',
-      headers: {
-        'Authorization': `Bearer ${oauthToken}`,
-        'Content-Type':  'application/json',
-      },
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${oauthToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ majorDimension: 'ROWS', range, values }),
     }
   );
@@ -164,27 +145,13 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
     const errBody = await res.json().catch(() => ({}));
     const message = errBody?.error?.message ?? `HTTP ${res.status}`;
     const status  = errBody?.error?.status  ?? '';
-
     if (res.status === 403) {
-      if (status === 'PERMISSION_DENIED' || message.includes('disabled')) {
-        throw new Error(
-          `Google Sheets API is not enabled for this project. ` +
-          `Go to console.cloud.google.com → APIs & Services → Enable “Google Sheets API”. ` +
-          `(${message})`
-        );
-      }
-      throw new Error(
-        `Insufficient permissions (403). The OAuth token may be missing the spreadsheets scope. ` +
-        `Sign out and sign in again to re-grant access. (${message})`
-      );
+      if (status === 'PERMISSION_DENIED' || message.includes('disabled'))
+        throw new Error(`Google Sheets API not enabled. Go to console.cloud.google.com → APIs & Services → Enable "Google Sheets API". (${message})`);
+      throw new Error(`Insufficient permissions (403). Sign out and sign in again to re-grant Sheets access. (${message})`);
     }
-
-    if (res.status === 401) {
-      throw new Error(
-        `OAuth token expired or invalid (401). Please sign out and sign in again. (${message})`
-      );
-    }
-
+    if (res.status === 401)
+      throw new Error(`OAuth token expired (401). Please sign out and sign in again. (${message})`);
     throw new Error(`Google Sheets write failed: ${message}`);
   }
 
