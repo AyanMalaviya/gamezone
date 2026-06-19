@@ -21,6 +21,7 @@ function SkeletonRow({ count }) {
 
 export default function StationLayout() {
   const { stations, isLoading, isError } = useStationData();
+  // selected = { station, stationIndex } so modal always gets the correct row index
   const [selected, setSelected] = useState(null);
 
   const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
@@ -30,6 +31,13 @@ export default function StationLayout() {
 
   const available = stations.filter(s => s.status === 'available' && Number(s.id) !== 8).length;
   const occupied  = stations.filter(s => s.status === 'occupied'  && Number(s.id) !== 8).length;
+
+  // Pass both station and its 0-based index in sorted[] to the modal.
+  // This is the row index used by updateStation() for Sheets writes.
+  const handleSelect = (station) => {
+    const stationIndex = sorted.findIndex(s => s.id === station.id);
+    setSelected({ station, stationIndex });
+  };
 
   return (
     <div style={{ minHeight: '100dvh', background: '#0d0d0f', display: 'flex', flexDirection: 'column' }}>
@@ -50,7 +58,6 @@ export default function StationLayout() {
       }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
-          {/* Subtitle only — no redundant GAMEZONE title since Navbar has the logo */}
           <div style={{ textAlign: 'center', marginBottom: 'clamp(16px,3vw,32px)' }}>
             <p style={{
               color: 'rgba(255,255,255,0.35)',
@@ -129,7 +136,7 @@ export default function StationLayout() {
             {!isLoading && !isError && (
               <>
                 <div className="station-row">
-                  {rowTop.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
+                  {rowTop.map(s => <StationCircle key={s.id} station={s} onClick={handleSelect} />)}
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: 5 }}>
@@ -138,11 +145,11 @@ export default function StationLayout() {
                       letterSpacing:'0.12em', textTransform:'uppercase',
                       color:'rgba(245,158,11,0.5)',
                     }}>🏁 Racing</span>
-                    {rowRacing.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
+                    {rowRacing.map(s => <StationCircle key={s.id} station={s} onClick={handleSelect} />)}
                   </div>
                 </div>
                 <div className="station-row">
-                  {rowBottom.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
+                  {rowBottom.map(s => <StationCircle key={s.id} station={s} onClick={handleSelect} />)}
                 </div>
               </>
             )}
@@ -157,7 +164,11 @@ export default function StationLayout() {
         </div>
       </main>
 
-      <StationModal station={selected} onClose={() => setSelected(null)} />
+      <StationModal
+        station={selected?.station ?? null}
+        stationIndex={selected?.stationIndex ?? null}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }

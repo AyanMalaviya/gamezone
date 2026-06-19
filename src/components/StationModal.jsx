@@ -48,8 +48,7 @@ const statusConfig = {
 
 /**
  * Station 8 is the Racing Simulator.
- * Detection: id === '8'  OR  stationType === 'racing' (sheet column F).
- * Both conditions should be true in normal operation.
+ * Detection: id === '8'  OR  stationType === 'racing' (sheet column C).
  */
 const isRacingStation = (station) =>
   String(station?.id) === '8' ||
@@ -76,7 +75,19 @@ function fmtSlot(slotStr) {
   return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
 }
 
-export default function StationModal({ station, onClose, onGameUpdate }) {
+/**
+ * Derive a clean display name for the station.
+ * Priority: sheet col B (stationName) → racing fallback → PS5 fallback.
+ */
+function getDisplayName(station, isRacing) {
+  if (station.stationName) return station.stationName;
+  if (isRacing) return 'Racing Simulator';
+  return `PS5 Station ${String(station.id).padStart(2, '0')}`;
+}
+
+// stationIndex is the 0-based position of this station in the sorted stations
+// array. It is passed from StationLayout so we never compute it from station.id.
+export default function StationModal({ station, stationIndex, onClose, onGameUpdate }) {
   const [loading, setLoading]     = useState(false);
   const [phoneGate, setPhoneGate] = useState(false);
   const [editing, setEditing]     = useState(false);
@@ -107,6 +118,9 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
   const key = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
   const cfg = statusConfig[key];
 
+  // Clean display name — always from sheet col B first
+  const displayName = getDisplayName(station, isRacing);
+
   const now = nowMinutes();
   const slots = Array.isArray(station.bookedSlots)
     ? station.bookedSlots.filter(Boolean)
@@ -128,18 +142,20 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
     if (!user) { onClose(); navigate('/auth/login'); return; }
     if (!phone) { setPhoneGate(true); return; }
 
-    const stationName  = isRacing ? 'Racing Simulator' : `PS5 Station ${station.id}`;
-    const ratePerHour  = isRacing ? PRICE_RACING : PRICE_PS5;
+    const ratePerHour = isRacing ? PRICE_RACING : PRICE_PS5;
 
     openPayment({
       type:   'booking',
-      label:  `${stationName} \u2014 1 Hour`,
+      // Use displayName (from sheet col B) so UPI modal shows the correct station name
+      label:  `${displayName} \u2014 1 Hour`,
       amount: ratePerHour,
       meta: {
         uid:           user?.uid ?? null,
         stationId:     station.id,
-        stationName,
-        stationIndex:  Number(station.id) - 1,  // 0-based row index for Sheets updateStation()
+        stationName:   displayName,
+        // stationIndex is passed from StationLayout as the sorted-array position.
+        // Falls back to Number(station.id)-1 only if prop is missing (e.g. AdminDashboard).
+        stationIndex:  stationIndex != null ? stationIndex : Number(station.id) - 1,
         stationType:   station.stationType || (isRacing ? 'racing' : 'ps5'),
         slot:          nextSlot ? `${nextSlot.start24}-${nextSlot.end24}` : '',
         game:          station.preferredGame || station.currentGame || '',
@@ -147,8 +163,6 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
         preferredGame: station.preferredGame || '',
         bookedSlots:   slots,
         isRacing,
-        // oauthToken is injected by AdminDashboard when it opens the payment modal.
-        // For regular user bookings it remains undefined — Sheets update is skipped.
         oauthToken: undefined,
       },
     });
@@ -173,7 +187,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
       <Dialog.Root open={!!station} onOpenChange={open => !open && onClose()}>
         <Dialog.Portal>
 
-          {/* \u2500\u2500 Overlay \u2500\u2500 */}
+          {/* Overlay */}
           <Dialog.Overlay
             style={{
               position: 'fixed', inset: 0,
@@ -185,7 +199,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
             }}
           />
 
-          {/* \u2500\u2500 Modal \u2500\u2500 */}
+          {/* Modal */}
           <Dialog.Content
             aria-describedby={undefined}
             onEscapeKeyDown={onClose}
@@ -216,7 +230,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
 
             <div style={{ padding: '22px 22px 26px' }}>
 
-              {/* \u2500\u2500 Header \u2500\u2500 */}
+              {/* Header */}
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18, gap:12 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:13 }}>
                   <div style={{
@@ -239,7 +253,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                       fontWeight:700, fontSize:'1.18rem',
                       color:'#fff', lineHeight:1.2, marginBottom:5,
                     }}>
-                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : `PS5 Station ${station.id}`}
+                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : displayName}
                     </Dialog.Title>
 
                     <span style={{
@@ -291,7 +305,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                 </div>
               ) : (
                 <>
-                  {/* \u2500\u2500 LIVE NOW banner \u2500\u2500 */}
+                  {/* LIVE NOW banner */}
                   {activeSlot && (
                     <div style={{
                       display:'flex', alignItems:'center', gap:10,
@@ -341,7 +355,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     </div>
                   )}
 
-                  {/* \u2500\u2500 Inline game editor \u2500\u2500 */}
+                  {/* Inline game editor */}
                   {editing && (
                     <div style={{
                       display:'flex', gap:7, marginBottom:14,
@@ -390,7 +404,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     </div>
                   )}
 
-                  {/* \u2500\u2500 Upcoming Slots \u2500\u2500 */}
+                  {/* Upcoming Slots */}
                   <div style={{ marginBottom:18 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
                       <Clock size={13} color="rgba(255,255,255,0.35)" />
@@ -442,7 +456,7 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     )}
                   </div>
 
-                  {/* \u2500\u2500 Currently Playing \u2500\u2500 */}
+                  {/* Currently Playing */}
                   {!activeSlot && station.currentGame && (
                     <div style={{ marginBottom: station.preferredGame ? 16 : 0 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:10 }}>
@@ -466,10 +480,9 @@ export default function StationModal({ station, onClose, onGameUpdate }) {
                     </div>
                   )}
 
-                  {/* \u2500\u2500 Divider \u2500\u2500 */}
                   <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'16px 0' }} />
 
-                  {/* \u2500\u2500 Book / Pay button \u2500\u2500 */}
+                  {/* Book / Pay button */}
                   {!isOccupied && (
                     <button
                       onClick={handleBook}
