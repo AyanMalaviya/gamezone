@@ -39,8 +39,6 @@ const isRacingStation = (s) =>
 
 const PRICE_RACING = 250;
 const PRICE_PS5    = 100;
-
-// Max bookable hours per type
 const MAX_HOURS_RACING = 2;
 const MAX_HOURS_PS5    = 4;
 
@@ -56,7 +54,7 @@ const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
 function fmtSlot(slotStr) {
   const p = parseSlot(slotStr);
   if (!p) return slotStr;
-  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
 }
 
 function getDisplayName(station, isRacing) {
@@ -65,9 +63,16 @@ function getDisplayName(station, isRacing) {
   return `PS5 Station ${String(station.id).padStart(2, '0')}`;
 }
 
-/* ─── Booking Flow: Step 1 — Pick Start Time ─── */
+function colorRgb(cfg) {
+  if (cfg.color === '#22c55e') return '34,197,94';
+  if (cfg.color === '#f59e0b') return '245,158,11';
+  return '124,58,237';
+}
+
+/* ─── Step 1 — Pick Start Time ─── */
 function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
   const [hovered, setHovered] = useState(null);
+  const rgb = colorRgb(cfg);
 
   return (
     <div style={{ animation: 'sm-fade-up 0.22s ease both' }}>
@@ -103,12 +108,9 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
               onMouseLeave={() => setHovered(null)}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '12px 14px', borderRadius: 10,
-                cursor: 'pointer',
+                padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
                 animation: `sm-slot-in 0.2s ${i * 40}ms ease both`,
-                background: hovered === i
-                  ? `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.14)`
-                  : 'rgba(255,255,255,0.04)',
+                background: hovered === i ? `rgba(${rgb},0.14)` : 'rgba(255,255,255,0.04)',
                 border: `1px solid ${hovered === i ? cfg.border : 'rgba(255,255,255,0.08)'}`,
                 transition: 'background .15s, border .15s',
                 width: '100%', textAlign: 'left',
@@ -120,7 +122,7 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
                   {st.label}
                 </span>
               </div>
-              <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', color: cfg.color, background: `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.12)`, padding: '2px 8px', borderRadius: 5 }}>SELECT</span>
+              <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', color: cfg.color, background: `rgba(${rgb},0.12)`, padding: '2px 8px', borderRadius: 5 }}>SELECT</span>
             </button>
           ))}
         </div>
@@ -130,13 +132,13 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
   );
 }
 
-/* ─── Booking Flow: Step 2 — Pick Duration ─── */
+/* ─── Step 2 — Pick Duration ─── */
 function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, onConfirm, onBack }) {
   const closeHour = 24;
   const maxFromClose = Math.floor((closeHour * 60 - startTime.startMin) / 60);
   const cap = Math.min(maxHours, maxFromClose);
+  const rgb = colorRgb(cfg);
 
-  // Find the first blocked offset from this start to cap available durations
   let availableCap = cap;
   for (let d = 1; d <= cap; d++) {
     if (startTime.blockedOffsets.has(d)) { availableCap = d; break; }
@@ -145,10 +147,10 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
   const durations = Array.from({ length: availableCap }, (_, i) => i + 1);
   const [selected, setSelected] = useState(1);
 
-  const endMin   = startTime.startMin + selected * 60;
-  const endH     = Math.floor(endMin / 60) % 24;
-  const end24    = `${String(endH).padStart(2, '0')}:00`;
-  const totalAmt = selected * ratePerHour;
+  const endMin    = startTime.startMin + selected * 60;
+  const endH      = Math.floor(endMin / 60) % 24;
+  const end24     = `${String(endH).padStart(2, '0')}:00`;
+  const totalAmt  = selected * ratePerHour;
   const slotValue = `${startTime.start24}-${minutesToHHMM(endMin)}`;
 
   return (
@@ -177,18 +179,16 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1rem', color: cfg.color }}>{startTime.label}</span>
       </div>
 
-      {/* Hour buttons */}
+      {/* Hour buttons — single border key only */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
         {durations.map(d => (
           <button
             key={d}
             onClick={() => setSelected(d)}
             style={{
-              flex: 1, padding: '14px 0', borderRadius: 10, border: 'none',
-              background: selected === d
-                ? `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.2)`
-                : 'rgba(255,255,255,0.05)',
+              flex: 1, padding: '14px 0', borderRadius: 10,
               border: `1.5px solid ${selected === d ? cfg.border : 'rgba(255,255,255,0.08)'}`,
+              background: selected === d ? `rgba(${rgb},0.2)` : 'rgba(255,255,255,0.05)',
               color: selected === d ? cfg.color : 'rgba(255,255,255,0.45)',
               cursor: 'pointer', transition: 'all .15s',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
@@ -201,7 +201,7 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
       </div>
 
       {/* Summary */}
-      <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 18, background: `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.06)`, border: `1px solid ${cfg.border}` }}>
+      <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 18, background: `rgba(${rgb},0.06)`, border: `1px solid ${cfg.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SESSION</span>
           <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, color: '#e2e8f0', fontSize: '0.9rem' }}>
@@ -249,7 +249,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   const [gameInput, setGameInput] = useState('');
   const [saving, setSaving]       = useState(false);
   const [saveOk, setSaveOk]       = useState(false);
-  // 'info' | 'start' | 'duration'
   const [view, setView]           = useState('info');
   const [selectedStart, setSelectedStart] = useState(null);
 
@@ -373,7 +372,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                   </div>
                   <div>
                     <Dialog.Title style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1.18rem', color: '#fff', lineHeight: 1.2, marginBottom: 5 }}>
-                      {isRacing ? '🏁 Racing Simulator' : displayName}
+                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : displayName}
                     </Dialog.Title>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, display: 'inline-block', animation: key !== 'available' ? 'sm-pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
@@ -400,30 +399,13 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                 </div>
               )}
 
-              {/* VIEW: Start Time Picker */}
               {view === 'start' && (
-                <StartTimePicker
-                  startTimes={startTimes}
-                  cfg={cfg}
-                  onSelect={handleStartSelected}
-                  onBack={() => setView('info')}
-                />
+                <StartTimePicker startTimes={startTimes} cfg={cfg} onSelect={handleStartSelected} onBack={() => setView('info')} />
               )}
-
-              {/* VIEW: Duration Picker */}
               {view === 'duration' && selectedStart && (
-                <DurationPicker
-                  startTime={selectedStart}
-                  bookedSlots={slots}
-                  cfg={cfg}
-                  ratePerHour={ratePerHour}
-                  maxHours={maxHours}
-                  onConfirm={handleConfirmBooking}
-                  onBack={() => setView('start')}
-                />
+                <DurationPicker startTime={selectedStart} bookedSlots={slots} cfg={cfg} ratePerHour={ratePerHour} maxHours={maxHours} onConfirm={handleConfirmBooking} onBack={() => setView('start')} />
               )}
 
-              {/* VIEW: Info */}
               {view === 'info' && (
                 loading ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -436,7 +418,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                   </div>
                 ) : (
                   <>
-                    {/* LIVE NOW */}
                     {activeSlot && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, marginBottom: 16, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.28)', animation: 'sm-slot-in 0.25s ease both' }}>
                         <span style={{ position: 'relative', width: 10, height: 10, flexShrink: 0 }}>
@@ -457,7 +438,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       </div>
                     )}
 
-                    {/* Game editor */}
                     {editing && (
                       <div style={{ display: 'flex', gap: 7, marginBottom: 14, animation: 'sm-slot-in 0.2s ease both' }}>
                         <input autoFocus value={gameInput} onChange={e => setGameInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveGame(); if (e.key === 'Escape') setEditing(false); }} placeholder="Enter game name…" style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: '#fff', fontSize: '0.85rem', outline: 'none' }} />
@@ -469,7 +449,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       </div>
                     )}
 
-                    {/* Upcoming booked slots */}
                     <div style={{ marginBottom: 18 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
                         <Clock size={13} color="rgba(255,255,255,0.35)" />
@@ -491,7 +470,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       )}
                     </div>
 
-                    {/* Currently Playing */}
                     {!activeSlot && station.currentGame && (
                       <div style={{ marginBottom: station.preferredGame ? 16 : 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
@@ -506,7 +484,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '16px 0' }} />
 
-                    {/* Book button */}
                     {!isOccupied && (
                       <button onClick={handleBookClick} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: isRacing ? 'linear-gradient(135deg,#d97706,#f59e0b)' : 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', fontFamily: "'Rajdhani','Inter',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isRacing ? '0 4px 20px rgba(217,119,6,0.35)' : '0 4px 20px rgba(124,58,237,0.35)', transition: 'opacity .15s, transform .15s' }}
                         onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
