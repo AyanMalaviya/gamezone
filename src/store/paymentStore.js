@@ -15,17 +15,17 @@ export const TEST_UPI_IDS = [
 async function simulateUpiPayment({ upiId, amount, orderId }) {
   if (!upiId || !upiId.includes('@')) throw new Error('Invalid UPI ID format. Must contain @');
   await new Promise(r => setTimeout(r, 800 + Math.random() * 1400));
-  const forceFail = upiId.toLowerCase().includes('fail');
+  const forceFail  = upiId.toLowerCase().includes('fail');
   const randomFail = Math.random() < 0.1;
   if (forceFail || randomFail) throw new Error('Payment declined by bank. Please try again or use a different UPI ID.');
   return {
-    txnId: 'GZ' + Date.now() + Math.floor(Math.random() * 1000),
+    txnId:     'GZ' + Date.now() + Math.floor(Math.random() * 1000),
     orderId,
     upiId,
     amount,
-    status: 'SUCCESS',
+    status:    'SUCCESS',
     timestamp: new Date().toISOString(),
-    bank: upiId.split('@')[1].toUpperCase(),
+    bank:      upiId.split('@')[1].toUpperCase(),
   };
 }
 
@@ -33,18 +33,20 @@ async function simulateUpiPayment({ upiId, amount, orderId }) {
 async function saveBookingToFirestore(uid, context, receipt) {
   if (!uid) return; // not logged in — skip silently
   try {
+    const meta = context.meta ?? {};
     await addDoc(collection(db, 'bookings'), {
       uid,
-      stationId:   context.meta?.stationId   ?? null,
-      stationName: context.meta?.stationName ?? context.label ?? '',
-      slot:        context.meta?.slot        ?? '',
-      game:        context.meta?.game        ?? '',
-      amount:      receipt.amount,
-      txnId:       receipt.txnId,
-      upiId:       receipt.upiId,
-      bank:        receipt.bank,
-      status:      'confirmed',
-      bookedAt:    serverTimestamp(),
+      stationId:        meta.stationId   ?? null,
+      stationName:      meta.stationName ?? context.label ?? '',
+      stationType:      meta.stationType ?? 'ps5',
+      slot:             meta.slot        ?? '',
+      game:             meta.game        ?? '',
+      amount:           receipt.amount,
+      txnId:            receipt.txnId,
+      upiId:            receipt.upiId,
+      bank:             receipt.bank,
+      status:           'confirmed',
+      bookedAt:         serverTimestamp(),
       receiptTimestamp: receipt.timestamp,
     });
   } catch (err) {
@@ -52,20 +54,35 @@ async function saveBookingToFirestore(uid, context, receipt) {
   }
 }
 
-/* ─── Update Google Sheets after payment ─── */
+/* ─── Update Google Sheets after payment ───
+ *
+ * Writes the full 8-column row back to Sheets:
+ *   A  id            B  stationName   C  stationType
+ *   D  status        E  activeSlot    F  bookedSlots
+ *   G  currentGame   H  preferredGame
+ */
 async function updateSheetsAfterPayment(context, oauthToken) {
-  if (!oauthToken || !context.meta?.stationIndex == null) return;
+  if (!oauthToken) return;
+  const meta = context.meta ?? {};
+  const { stationIndex } = meta;
+  if (stationIndex == null) return;
+
   try {
-    const { stationIndex, stationId, slot, currentGame, preferredGame, bookedSlots = [] } = context.meta ?? {};
-    if (stationIndex == null) return;
-    const updatedSlots = slot ? [...new Set([...bookedSlots, slot])] : bookedSlots;
+    // Add the newly booked slot to the existing bookedSlots list
+    const existingSlots = Array.isArray(meta.bookedSlots) ? meta.bookedSlots : [];
+    const updatedSlots  = meta.slot
+      ? [...new Set([...existingSlots, meta.slot])]
+      : existingSlots;
+
     await updateStation(stationIndex, {
-      id:            stationId,
+      id:            meta.stationId    ?? '',
+      stationName:   meta.stationName  ?? '',
+      stationType:   meta.stationType  ?? 'ps5',
       status:        'occupied',
-      currentGame:   currentGame   ?? '',
+      activeSlot:    meta.slot         ?? null,
       bookedSlots:   updatedSlots,
-      preferredGame: preferredGame ?? '',
-      stationType:   context.meta?.stationType ?? '',
+      currentGame:   meta.game         ?? '',
+      preferredGame: meta.preferredGame ?? '',
     }, oauthToken);
   } catch (err) {
     console.warn('[paymentStore] Sheets update after payment failed:', err.message);
@@ -73,16 +90,15 @@ async function updateSheetsAfterPayment(context, oauthToken) {
 }
 
 const usePaymentStore = create((set, get) => ({
-  isOpen:   false,
-  context:  null,  // { type, label, amount, meta: { uid, stationId, stationIndex, slot, ... }, oauthToken }
-  step:     'form',
-  receipt:  null,
-  error:    null,
-  history:  [],
+  isOpen:  false,
+  context: null,   // { type, label, amount, meta: { uid, stationId, stationIndex, stationName, stationType, slot, game, bookedSlots, preferredGame, oauthToken } }
+  step:    'form',
+  receipt: null,
+  error:   null,
+  history: [],
 
-  openPayment: (context) => set({ isOpen: true, context, step: 'form', receipt: null, error: null }),
-
-  closePayment: () => set({ isOpen: false, context: null, step: 'form', receipt: null, error: null }),
+  openPayment:  (context) => set({ isOpen: true, context, step: 'form', receipt: null, error: null }),
+  closePayment: ()        => set({ isOpen: false, context: null, step: 'form', receipt: null, error: null }),
 
   pay: async ({ upiId }) => {
     const { context } = get();
@@ -97,7 +113,7 @@ const usePaymentStore = create((set, get) => ({
       // 1. Save booking to Firestore (non-blocking)
       saveBookingToFirestore(context.meta?.uid ?? null, context, receipt);
 
-      // 2. Update Google Sheets station row (non-blocking)
+      // 2. Update Google Sheets (non-blocking)
       if (context.meta?.oauthToken) {
         updateSheetsAfterPayment(context, context.meta.oauthToken);
       }

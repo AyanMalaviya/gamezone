@@ -149,7 +149,7 @@ export default function Footer() {
             <div className="gz-footer-col">
               <span className="gz-footer-col-title">Account</span>
               <Link to="/auth/login">Sign In</Link>
-              <Link to="/auth/signup">Sign Up</Link>
+              <Link to="/auth/register">Register</Link>
               <Link to="/profile">My Profile</Link>
             </div>
             <div className="gz-footer-col">

@@ -12,7 +12,7 @@ import { auth, googleProvider } from '../lib/firebase';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// ─── helpers ───────────────────────────────────────────────────────────────────
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
@@ -63,11 +63,8 @@ const StatCard = ({ label, value, Icon, glow }) => {
 
 /**
  * extractOAuthToken — pulls the Google OAuth2 access token from
- * a signInWithPopup result using two fallback strategies.
- *
- * credentialFromResult() returns null on repeat sign-ins when
- * Firebase reuses a cached session. _tokenResponse.oauthAccessToken
- * is always populated by Firebase internally.
+ * a signInWithPopup result. credentialFromResult() is the official
+ * method; _tokenResponse is a reliable internal fallback.
  */
 const extractOAuthToken = (result) => {
   const cred = GoogleAuthProvider.credentialFromResult(result);
@@ -76,7 +73,7 @@ const extractOAuthToken = (result) => {
   return result?._tokenResponse?.oauthAccessToken ?? null;
 };
 
-// ─── LoginPage ───────────────────────────────────────────────────────────────
+// ─── LoginPage ─────────────────────────────────────────────────────────────────
 
 const LoginPage = ({ onLogin, busy, error }) => (
   <div className="adm-login-wrap">
@@ -108,17 +105,30 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── StationRow ──────────────────────────────────────────────────────────────
-
+// ─── StationRow ────────────────────────────────────────────────────────────────
+/**
+ * StationRow maps to the new 8-column sheet layout:
+ *   A id  B stationName  C stationType  D status
+ *   E activeSlot  F bookedSlots  G currentGame  H preferredGame
+ */
 const StationRow = ({ station, index, oauthToken }) => {
+  const serializeSlot = (slot) => {
+    if (!slot) return '';
+    if (typeof slot === 'string') return slot;
+    if (slot.start24 && slot.end24) return `${slot.start24}-${slot.end24}`;
+    return '';
+  };
+
   const init = () => ({
     status:        station.status        || 'available',
-    currentGame:   station.currentGame   || '',
+    activeSlot:    serializeSlot(station.activeSlot),
     bookedSlots:   Array.isArray(station.bookedSlots)
                      ? station.bookedSlots.join(', ')
                      : (station.bookedSlots || ''),
+    currentGame:   station.currentGame   || '',
     preferredGame: station.preferredGame || '',
   });
+
   const [form, setForm]     = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
@@ -132,12 +142,14 @@ const StationRow = ({ station, index, oauthToken }) => {
     setSaving(true); setErr(null);
     try {
       await updateStation(index, {
-        id:            station.id,
+        id:            station.id          ?? '',
+        stationName:   station.stationName ?? '',
+        stationType:   station.stationType ?? 'ps5',
         status:        form.status,
-        currentGame:   form.currentGame,
+        activeSlot:    form.activeSlot     || null,
         bookedSlots:   form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
+        currentGame:   form.currentGame,
         preferredGame: form.preferredGame,
-        stationType:   station.stationType || '',
       }, oauthToken);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -149,15 +161,24 @@ const StationRow = ({ station, index, oauthToken }) => {
   };
 
   const occupied = form.status?.toLowerCase() === 'occupied';
+  const typeLabel = station.stationType === 'racing' ? '🏎️' : '🎮';
 
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
+      {/* # */}
       <td className="td-id">
         <div className="id-badge">
-          <span>{String(station.id || index + 1).padStart(2, '0')}</span>
+          <span>{typeLabel} {String(station.id || index + 1).padStart(2, '0')}</span>
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
+      {/* Station Name */}
+      <td className="td-i" style={{ minWidth: 130 }}>
+        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
+          {station.stationName || '—'}
+        </span>
+      </td>
+      {/* Status */}
       <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
           className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
@@ -165,23 +186,37 @@ const StationRow = ({ station, index, oauthToken }) => {
           <option value="occupied">● Occupied</option>
         </select>
       </td>
-      <td className="td-i"><input type="text" name="currentGame"
-        value={form.currentGame} onChange={onChange}
-        placeholder="e.g. FIFA 25" className="ni" /></td>
-      <td className="td-i td-w"><input type="text" name="bookedSlots"
-        value={form.bookedSlots} onChange={onChange}
-        placeholder="10:00-11:00, 13:00-14:00" className="ni" /></td>
-      <td className="td-i"><input type="text" name="preferredGame"
-        value={form.preferredGame} onChange={onChange}
-        placeholder="Preferred game" className="ni" /></td>
+      {/* Active Slot */}
+      <td className="td-i">
+        <input type="text" name="activeSlot"
+          value={form.activeSlot} onChange={onChange}
+          placeholder="14:00-15:00" className="ni" style={{ width: 110 }} />
+      </td>
+      {/* Booked Slots */}
+      <td className="td-i td-w">
+        <input type="text" name="bookedSlots"
+          value={form.bookedSlots} onChange={onChange}
+          placeholder="10:00-11:00, 13:00-14:00" className="ni" />
+      </td>
+      {/* Current Game */}
+      <td className="td-i">
+        <input type="text" name="currentGame"
+          value={form.currentGame} onChange={onChange}
+          placeholder="e.g. FC 25" className="ni" />
+      </td>
+      {/* Preferred Game */}
+      <td className="td-i">
+        <input type="text" name="preferredGame"
+          value={form.preferredGame} onChange={onChange}
+          placeholder="Preferred" className="ni" />
+      </td>
+      {/* Save */}
       <td className="td-sv">
         {err && (
-          <p className="sv-errmsg" title={err} style={{
+          <p style={{
             fontSize: '0.65rem', color: 'var(--color-error, #f87171)',
             marginBottom: '4px', maxWidth: '180px', wordBreak: 'break-word',
-          }}>
-            ⚠ {err}
-          </p>
+          }}>⚠ {err}</p>
         )}
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
@@ -199,22 +234,10 @@ const StationRow = ({ station, index, oauthToken }) => {
 // ─── AdminDashboard ──────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
-  /**
-   * Admin auth is FULLY LOCAL to this component.
-   *
-   * We do NOT rely on the global Zustand auth store for admin access because
-   * onAuthStateChanged sets `user` for ANY signed-in user (including regular
-   * customers). If we checked the store's `user`, the LoginPage would be
-   * skipped for any logged-in customer, the Google popup would never fire,
-   * and oauthToken would remain null forever.
-   *
-   * Instead, the admin must always go through signInWithPopup() here to get
-   * a fresh OAuth access token scoped to Google Sheets.
-   */
-  const [adminUser,   setAdminUser]   = useState(null);
-  const [adminToken,  setAdminToken]  = useState(null);
-  const [loginBusy,   setLoginBusy]   = useState(false);
-  const [loginError,  setLoginError]  = useState(null);
+  const [adminUser,  setAdminUser]  = useState(null);
+  const [adminToken, setAdminToken] = useState(null);
+  const [loginBusy,  setLoginBusy]  = useState(false);
+  const [loginError, setLoginError] = useState(null);
 
   const { stations, isLoading, isError, refetch } = useStationData();
   const navigate = useNavigate();
@@ -245,15 +268,13 @@ export default function AdminDashboard() {
       const token  = extractOAuthToken(result);
 
       if (import.meta.env.DEV) {
-        console.info('[admin] signInWithPopup result:', result);
         console.info('[admin] oauthToken:', token ? token.slice(0, 16) + '…' : 'NULL ← problem!');
       }
 
       if (!token) {
         setLoginError(
           'Google did not return an OAuth token. ' +
-          'Make sure the Google Sheets API is enabled in Google Cloud Console ' +
-          'and the Sheets scope is added to your OAuth consent screen.'
+          'Ensure the Sheets API is enabled and the spreadsheets scope is on the OAuth consent screen.'
         );
         await signOut(auth);
         return;
@@ -338,14 +359,14 @@ export default function AdminDashboard() {
               <table className="tbl">
                 <thead>
                   <tr className="tbl-head">
-                    {['#', 'Status', 'Current Game', 'Booked Slots', 'Preferred Game', ''].map((h, i) => (
+                    {['#', 'Station Name', 'Status', 'Active Slot', 'Booked Slots', 'Current Game', 'Preferred Game', ''].map((h, i) => (
                       <th key={i} className="tbl-th">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {stations.map((s, i) => (
-                    <StationRow key={`station-${i}`} station={s} index={i} oauthToken={adminToken} />
+                    <StationRow key={`station-${s.id || i}`} station={s} index={i} oauthToken={adminToken} />
                   ))}
                 </tbody>
               </table>
