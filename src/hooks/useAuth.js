@@ -11,8 +11,7 @@ import { auth, googleProvider } from "../lib/firebase";
 import { createUserProfile, getUserProfile, savePhoneNumber } from "./useUserProfile";
 import useAuthStore from "../store/authStore";
 
-// ─── Named function exports (used by AuthPage, AuthModal, CompleteProfileModal) ───
-
+// ─── Email login ──────────────────────────────────────────────────────────────
 export async function loginWithEmail(email, password) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
   if (!cred.user.emailVerified) {
@@ -24,6 +23,7 @@ export async function loginWithEmail(email, password) {
   return cred;
 }
 
+// ─── Email register ───────────────────────────────────────────────────────────
 export async function registerWithEmail(email, password, phoneOrName) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   const isPhone = /^[+\d]/.test(phoneOrName);
@@ -37,8 +37,35 @@ export async function registerWithEmail(email, password, phoneOrName) {
   return cred;
 }
 
+// ─── Google login ─────────────────────────────────────────────────────────────
+/**
+ * loginWithGoogle
+ *
+ * Signs in via Google popup and:
+ *  1. Creates a Firestore profile if first sign-in.
+ *  2. Extracts the OAuth2 access_token from the credential and saves it
+ *     to the Zustand store so AdminDashboard can use it for Sheets writes.
+ *
+ * The access_token is only available immediately after signInWithPopup —
+ * it is NOT available later via onAuthStateChanged, which is why we must
+ * capture it here.
+ */
 export async function loginWithGoogle() {
   const cred = await signInWithPopup(auth, googleProvider);
+
+  // Extract Google OAuth2 access_token (has spreadsheets scope)
+  const { OAuthCredential } = await import("firebase/auth");
+  // credential is a GoogleAuthCredential — accessToken lives on the result
+  const accessToken = cred._tokenResponse?.oauthAccessToken
+    ?? cred.user?.stsTokenManager?.accessToken
+    ?? null;
+
+  // Persist token to Zustand store immediately
+  if (accessToken) {
+    useAuthStore.getState().setOauthToken(accessToken);
+  }
+
+  // Create Firestore profile if it doesn't exist yet
   const existing = await getUserProfile(cred.user.uid);
   if (!existing) {
     await createUserProfile(cred.user.uid, {
@@ -47,16 +74,23 @@ export async function loginWithGoogle() {
       phone: "",
     });
   }
+
   return cred;
 }
 
-// Alias used by CompleteProfileModal
+// ─── Phone helper ─────────────────────────────────────────────────────────────
 export async function savePhone(uid, phone) {
   return savePhoneNumber(uid, phone);
 }
 
-// ─── Hook: used by App.jsx to listen to auth state + populate Zustand store ───
-
+// ─── App-level auth listener (App.jsx) ───────────────────────────────────────
+/**
+ * useAuthListener
+ *
+ * Bootstraps Firebase auth state and populates the Zustand store.
+ * Note: onAuthStateChanged does NOT provide the OAuth access_token —
+ * that is captured once in loginWithGoogle() above.
+ */
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
   const setRole    = useAuthStore(s => s.setRole);
@@ -67,10 +101,16 @@ export function useAuthListener() {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        const prof = await getUserProfile(firebaseUser.uid);
-        // prof shape: { email, name, phone, role, ... }
-        setRole(prof?.role  ?? null);
-        setPhone(prof?.phone ?? null);
+        try {
+          const prof = await getUserProfile(firebaseUser.uid);
+          setRole(prof?.role  ?? null);
+          setPhone(prof?.phone ?? null);
+        } catch (err) {
+          // Firestore read failed (e.g. offline) — degrade gracefully
+          console.warn('[useAuthListener] profile fetch failed:', err.message);
+          setRole(null);
+          setPhone(null);
+        }
       } else {
         setUser(null);
         setRole(null);
@@ -82,8 +122,7 @@ export function useAuthListener() {
   }, [setUser, setRole, setPhone, setLoading]);
 }
 
-// ─── Hook: local state version (used inside components that don't use Zustand) ───
-
+// ─── Component-local hook ─────────────────────────────────────────────────────
 export function useAuth() {
   const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
