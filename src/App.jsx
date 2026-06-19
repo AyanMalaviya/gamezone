@@ -10,6 +10,9 @@ import PricingPage from './pages/PricingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthGuard from './components/AuthGuard';
 
+/* Named export consumed by Navbar.jsx */
+export const ADMIN_PATH = 'admin';
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -25,7 +28,7 @@ export default function App() {
             <AuthPage />
           </AuthGuard>
         } />
-        <Route path="/admin" element={
+        <Route path={`/${ADMIN_PATH}`} element={
           <ProtectedRoute adminOnly>
             <AdminDashboard />
           </ProtectedRoute>
