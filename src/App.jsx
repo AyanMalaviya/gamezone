@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import UpiPaymentModal from './components/UpiPaymentModal';
+import ScrollToTop from './components/ScrollToTop';
 import LandingPage from './pages/LandingPage';
 import StationLayout from './pages/StationLayout';
 import AuthPage from './pages/AuthPage';
@@ -22,6 +23,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <UpiPaymentModal />
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
         <Navbar />
