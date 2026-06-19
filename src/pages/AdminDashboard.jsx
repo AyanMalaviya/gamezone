@@ -3,20 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star,
   RefreshCw, CheckCircle2, AlertTriangle, Users, Settings, Plus,
-  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff, Edit3, X,
+  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff,
 } from 'lucide-react';
 import { signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import useStationData from '../hooks/useStationData';
 import { updateStation } from '../lib/sheets';
 import { auth, googleProvider } from '../lib/firebase';
-import {
-  listAllUsers, updateUserProfile, setUserRole,
-  getCustomSchema, saveCustomSchema,
-} from '../hooks/useUsers';
+import { listAllUsers, updateUserProfile, setUserRole } from '../hooks/useUsers';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-// ─── Google icon ──────────────────────────────────────────────────────────────
+// ─── Google icon ────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -71,11 +68,10 @@ const extractOAuthToken = (result) => {
   return result?._tokenResponse?.oauthAccessToken ?? null;
 };
 
-// ─── Session persistence keys ─────────────────────────────────────────────────
 const SESSION_TOKEN_KEY = 'gz_admin_oauth';
 const SESSION_USER_KEY  = 'gz_admin_user';
 
-// ─── LoginPage ────────────────────────────────────────────────────────────────
+// ─── LoginPage ───────────────────────────────────────────────────────────────
 const LoginPage = ({ onLogin, busy, error }) => (
   <div className="adm-login-wrap">
     <NeonBg />
@@ -97,7 +93,7 @@ const LoginPage = ({ onLogin, busy, error }) => (
         <div className="login-divider"><span>GOOGLE AUTH</span></div>
         <button onClick={onLogin} disabled={busy} className="login-btn">
           {busy ? <Loader2 size={18} className="adm-spin" /> : <GoogleIcon />}
-          <span>{busy ? 'Authenticating\u2026' : 'Sign in with Google'}</span>
+          <span>{busy ? 'Authenticating…' : 'Sign in with Google'}</span>
           <div className="login-shine" />
         </button>
         <p className="login-note">Only authorised admins can access this panel</p>
@@ -106,7 +102,7 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── StationRow ───────────────────────────────────────────────────────────────
+// ─── StationRow ──────────────────────────────────────────────────────────────
 const StationRow = ({ station, rowIndex, oauthToken }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
@@ -148,7 +144,7 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
     } finally { setSaving(false); }
   };
   const occupied  = form.status?.toLowerCase() === 'occupied';
-  const typeLabel = station.stationType === 'racing' ? '\uD83C\uDFCE\uFE0F' : '\uD83C\uDFAE';
+  const typeLabel = station.stationType === 'racing' ? '🏎️' : '🎮';
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
       <td className="td-id">
@@ -159,14 +155,14 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
       </td>
       <td className="td-i" style={{ minWidth: 130 }}>
         <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-          {station.stationName || '\u2014'}
+          {station.stationName || '—'}
         </span>
       </td>
       <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
           className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
-          <option value="available">\u25CF Available</option>
-          <option value="occupied">\u25CF Occupied</option>
+          <option value="available">Available</option>
+          <option value="occupied">Occupied</option>
         </select>
       </td>
       <td className="td-i">
@@ -186,41 +182,77 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
           placeholder="Preferred" className="ni" />
       </td>
       <td className="td-sv">
-        {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>\u26A0 {err}</p>}
+        {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>&#9888; {err}</p>}
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
           {saving ? <Loader2 size={13} className="adm-spin" />
             : saved  ? <CheckCircle2 size={13} />
             : err    ? <AlertTriangle size={13} />
             : <Save size={13} />}
-          <span>{saving ? 'Saving\u2026' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
+          <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
         </button>
       </td>
     </tr>
   );
 };
 
-// ─── UserRow ──────────────────────────────────────────────────────────────────
-const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
-  const [expanded, setExpanded]   = useState(false);
-  const [form, setForm]           = useState({
-    name:  user.name  || '',
-    phone: user.phone || '',
-    email: user.email || '',
-    ...Object.fromEntries((schema || []).map(f => [f.id, user[f.id] ?? ''])),
-  });
-  const [saving, setSaving]   = useState(false);
-  const [saved, setSaved]     = useState(false);
-  const [roleChanging, setRC] = useState(false);
+// ─── input style helper ───────────────────────────────────────────────────────
+const inputStyle = {
+  width: '100%', padding: '8px 10px', borderRadius: 7,
+  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+  color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
+};
 
+// ─── UserRow ─────────────────────────────────────────────────────────────────
+/**
+ * Each UserRow holds its own local custom-field state.
+ * Admin can:
+ *   - Edit core fields (name, email, phone)
+ *   - Add new ad-hoc key/value pairs specific to this user
+ *   - Delete any custom field from this user
+ *   - Toggle admin role
+ * All saved directly to Firestore user doc.
+ */
+const UserRow = ({ user, onUpdate, onRoleChange }) => {
+  const [expanded, setExpanded] = useState(false);
   const isAdmin = user.role === 'admin';
 
-  const onChange = (key, val) => setForm(p => ({ ...p, [key]: val }));
+  // Core editable fields
+  const [core, setCore] = useState({
+    name:  user.name  || '',
+    email: user.email || '',
+    phone: user.phone || '',
+  });
+
+  // Extra fields: everything in the user doc that isn't a system key
+  const SYSTEM_KEYS = new Set(['uid', 'name', 'email', 'phone', 'role', 'createdAt', 'hasPhone']);
+  const extraInitial = Object.entries(user)
+    .filter(([k]) => !SYSTEM_KEYS.has(k))
+    .map(([k, v]) => ({ key: k, value: String(v ?? '') }));
+
+  const [extras, setExtras]     = useState(extraInitial);
+  const [saving, setSaving]     = useState(false);
+  const [saved, setSaved]       = useState(false);
+  const [roleChanging, setRC]   = useState(false);
+  const [newKey, setNewKey]     = useState('');
+  const [newVal, setNewVal]     = useState('');
+  const [addingField, setAdding]= useState(false);
+
+  // Keep state in sync if parent refreshes user list
+  useEffect(() => {
+    setCore({ name: user.name || '', email: user.email || '', phone: user.phone || '' });
+    const fresh = Object.entries(user)
+      .filter(([k]) => !SYSTEM_KEYS.has(k))
+      .map(([k, v]) => ({ key: k, value: String(v ?? '') }));
+    setExtras(fresh);
+  }, [user.uid]); // eslint-disable-line
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onUpdate(user.uid, form);
+      const fields = { ...core };
+      extras.forEach(({ key, value }) => { if (key.trim()) fields[key.trim()] = value; });
+      await onUpdate(user.uid, fields);
       setSaved(true); setTimeout(() => setSaved(false), 2000);
     } finally { setSaving(false); }
   };
@@ -231,26 +263,39 @@ const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
     finally { setRC(false); }
   };
 
+  const addExtra = () => {
+    const k = newKey.trim();
+    if (!k) return;
+    setExtras(e => [...e, { key: k, value: newVal }]);
+    setNewKey('');
+    setNewVal('');
+    setAdding(false);
+  };
+
+  const removeExtra = (idx) => setExtras(e => e.filter((_, i) => i !== idx));
+
+  const updateExtra = (idx, field, val) =>
+    setExtras(e => e.map((item, i) => i === idx ? { ...item, [field]: val } : item));
+
   return (
     <div style={{
       borderRadius: 10, marginBottom: 8,
       background: 'rgba(255,255,255,0.03)',
       border: `1px solid ${isAdmin ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.07)'}`,
       overflow: 'hidden',
-      transition: 'border-color .2s',
     }}>
-      {/* Summary row */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '12px 16px', cursor: 'pointer',
-      }} onClick={() => setExpanded(e => !e)}>
-        {/* Avatar */}
+      {/* Collapsed summary row */}
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
+        onClick={() => setExpanded(e => !e)}
+      >
         <div style={{
           width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
           background: isAdmin ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.07)',
           border: `1.5px solid ${isAdmin ? 'rgba(168,85,247,0.5)' : 'rgba(255,255,255,0.1)'}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '0.85rem', fontWeight: 700, color: isAdmin ? '#c084fc' : 'rgba(255,255,255,0.5)',
+          fontSize: '0.85rem', fontWeight: 700,
+          color: isAdmin ? '#c084fc' : 'rgba(255,255,255,0.5)',
           fontFamily: "'Rajdhani','Inter',sans-serif",
         }}>
           {(user.name || user.email || '?')[0].toUpperCase()}
@@ -261,7 +306,6 @@ const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
           </div>
           <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.35)', marginTop: 1 }}>{user.email}</div>
         </div>
-        {/* Role badge */}
         <span style={{
           fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em',
           padding: '2px 8px', borderRadius: 99,
@@ -269,82 +313,123 @@ const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
           border: `1px solid ${isAdmin ? 'rgba(168,85,247,0.4)' : 'rgba(255,255,255,0.1)'}`,
           color: isAdmin ? '#c084fc' : 'rgba(255,255,255,0.4)',
           flexShrink: 0,
-        }}>{isAdmin ? '\uD83D\uDEE1\uFE0F ADMIN' : 'MEMBER'}</span>
-        {/* Phone badge */}
+        }}>{isAdmin ? 'ADMIN' : 'MEMBER'}</span>
         {user.phone && (
-          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
-            {user.phone}
-          </span>
+          <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>{user.phone}</span>
         )}
-        {expanded ? <ChevronUp size={14} color="rgba(255,255,255,0.3)" /> : <ChevronDown size={14} color="rgba(255,255,255,0.3)" />}
+        {expanded
+          ? <ChevronUp size={14} color="rgba(255,255,255,0.3)" />
+          : <ChevronDown size={14} color="rgba(255,255,255,0.3)" />}
       </div>
 
-      {/* Expanded edit panel */}
+      {/* Expanded panel */}
       {expanded && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10, marginTop: 14 }}>
-            {/* Core fields */}
-            {[
-              { key: 'name',  label: 'Name',  type: 'text' },
-              { key: 'email', label: 'Email', type: 'text' },
-              { key: 'phone', label: 'Phone', type: 'text' },
-            ].map(({ key, label, type }) => (
+
+          {/* Core fields */}
+          <p style={{ fontSize: '0.6rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', margin: '14px 0 8px' }}>Core Info</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
+            {[['name','Name'],['email','Email'],['phone','Phone']].map(([key, label]) => (
               <div key={key}>
                 <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>{label.toUpperCase()}</label>
                 <input
-                  type={type}
-                  value={form[key]}
-                  onChange={e => onChange(key, e.target.value)}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 7,
-                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                    color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
-                  }}
+                  type="text"
+                  value={core[key]}
+                  onChange={e => setCore(p => ({ ...p, [key]: e.target.value }))}
+                  style={inputStyle}
                 />
-              </div>
-            ))}
-            {/* Dynamic custom fields */}
-            {(schema || []).map(field => (
-              <div key={field.id}>
-                <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>
-                  {field.label.toUpperCase()}
-                </label>
-                {field.type === 'select' ? (
-                  <select
-                    value={form[field.id] ?? ''}
-                    onChange={e => onChange(field.id, e.target.value)}
-                    style={{
-                      width: '100%', padding: '8px 10px', borderRadius: 7,
-                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
-                    }}
-                  >
-                    <option value="">— select —</option>
-                    {(field.options || []).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type === 'number' ? 'number' : 'text'}
-                    value={form[field.id] ?? ''}
-                    onChange={e => onChange(field.id, e.target.value)}
-                    style={{
-                      width: '100%', padding: '8px 10px', borderRadius: 7,
-                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                      color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
-                    }}
-                  />
-                )}
               </div>
             ))}
           </div>
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+          {/* Extra / custom fields */}
+          {(extras.length > 0 || addingField) && (
+            <>
+              <p style={{ fontSize: '0.6rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', margin: '14px 0 8px' }}>Extra Info</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {extras.map((item, idx) => (
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
+                    <input
+                      placeholder="Field name"
+                      value={item.key}
+                      onChange={e => updateExtra(idx, 'key', e.target.value)}
+                      style={{ ...inputStyle, fontWeight: 600 }}
+                    />
+                    <input
+                      placeholder="Value"
+                      value={item.value}
+                      onChange={e => updateExtra(idx, 'value', e.target.value)}
+                      style={inputStyle}
+                    />
+                    <button
+                      onClick={() => removeExtra(idx)}
+                      style={{
+                        width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                        color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                    ><Trash2 size={13} /></button>
+                  </div>
+                ))}
+
+                {addingField && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 8, alignItems: 'center' }}>
+                    <input
+                      autoFocus
+                      placeholder="e.g. address"
+                      value={newKey}
+                      onChange={e => setNewKey(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addExtra()}
+                      style={{ ...inputStyle, borderColor: 'rgba(124,58,237,0.4)' }}
+                    />
+                    <input
+                      placeholder="Value"
+                      value={newVal}
+                      onChange={e => setNewVal(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && addExtra()}
+                      style={inputStyle}
+                    />
+                    <button
+                      onClick={addExtra}
+                      style={{
+                        padding: '7px 10px', borderRadius: 7,
+                        background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.4)',
+                        color: '#a78bfa', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}
+                    >Add</button>
+                    <button
+                      onClick={() => { setAdding(false); setNewKey(''); setNewVal(''); }}
+                      style={{
+                        width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                        color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer',
+                      }}
+                    ><AlertTriangle size={12} /></button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Actions row */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              onClick={() => setAdding(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '7px 12px', borderRadius: 8,
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.45)', fontSize: '0.76rem', cursor: 'pointer',
+              }}
+            ><Plus size={12} /> Add Field</button>
+
             <button
               onClick={handleSave} disabled={saving}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', borderRadius: 8, border: 'none',
+                padding: '8px 14px', borderRadius: 8,
                 background: saved ? 'rgba(34,197,94,0.2)' : 'rgba(124,58,237,0.2)',
                 border: `1px solid ${saved ? 'rgba(34,197,94,0.4)' : 'rgba(124,58,237,0.4)'}`,
                 color: saved ? '#4ade80' : '#a78bfa',
@@ -352,7 +437,7 @@ const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
               }}
             >
               {saving ? <Loader2 size={12} className="adm-spin" /> : saved ? <CheckCircle2 size={12} /> : <Save size={12} />}
-              {saving ? 'Saving\u2026' : saved ? 'Saved!' : 'Save Changes'}
+              {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Changes'}
             </button>
 
             <button
@@ -378,135 +463,6 @@ const UserRow = ({ user, schema, onUpdate, onRoleChange }) => {
   );
 };
 
-// ─── SchemaEditor ─────────────────────────────────────────────────────────────
-const SchemaEditor = ({ schema, onSave }) => {
-  const [fields, setFields] = useState(schema);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved]   = useState(false);
-
-  useEffect(() => { setFields(schema); }, [schema]);
-
-  const addField = () => {
-    setFields(f => [...f, {
-      id:      `field_${Date.now()}`,
-      label:   '',
-      type:    'text',
-      options: [],
-    }]);
-  };
-
-  const removeField = (id) => setFields(f => f.filter(x => x.id !== id));
-
-  const updateField = (id, key, val) =>
-    setFields(f => f.map(x => x.id === id ? { ...x, [key]: val } : x));
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      // Validate: each field must have a label
-      const valid = fields.filter(f => f.label.trim());
-      await onSave(valid);
-      setFields(valid);
-      setSaved(true); setTimeout(() => setSaved(false), 2000);
-    } finally { setSaving(false); }
-  };
-
-  return (
-    <div>
-      <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', marginBottom: 16 }}>
-        Define custom fields that appear on every user profile. Changes apply immediately.
-      </p>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        {fields.map((field, i) => (
-          <div key={field.id} style={{
-            display: 'grid', gridTemplateColumns: '1fr 120px 1fr auto',
-            gap: 8, alignItems: 'center',
-            padding: '10px 12px', borderRadius: 8,
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
-          }}>
-            <input
-              placeholder="Field label (e.g. Address)"
-              value={field.label}
-              onChange={e => updateField(field.id, 'label', e.target.value)}
-              style={{
-                padding: '7px 10px', borderRadius: 7,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', width: '100%', boxSizing: 'border-box',
-              }}
-            />
-            <select
-              value={field.type}
-              onChange={e => updateField(field.id, 'type', e.target.value)}
-              style={{
-                padding: '7px 8px', borderRadius: 7,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', width: '100%',
-              }}
-            >
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="select">Select</option>
-            </select>
-            <input
-              placeholder={field.type === 'select' ? 'Options: A, B, C' : 'Placeholder (optional)'}
-              value={field.type === 'select' ? (field.options || []).join(', ') : (field.placeholder || '')}
-              onChange={e => {
-                if (field.type === 'select') {
-                  updateField(field.id, 'options', e.target.value.split(',').map(s => s.trim()).filter(Boolean));
-                } else {
-                  updateField(field.id, 'placeholder', e.target.value);
-                }
-              }}
-              style={{
-                padding: '7px 10px', borderRadius: 7,
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#e2e8f0', fontSize: '0.8rem', outline: 'none', width: '100%', boxSizing: 'border-box',
-              }}
-            />
-            <button
-              onClick={() => removeField(field.id)}
-              style={{
-                width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-                color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-            ><Trash2 size={13} /></button>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={addField}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 8,
-            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-            color: 'rgba(255,255,255,0.5)', fontSize: '0.8rem', cursor: 'pointer',
-          }}
-        ><Plus size={13} /> Add Field</button>
-
-        <button
-          onClick={handleSave} disabled={saving}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px 14px', borderRadius: 8, border: 'none',
-            background: saved ? 'rgba(34,197,94,0.15)' : 'rgba(124,58,237,0.2)',
-            border: `1px solid ${saved ? 'rgba(34,197,94,0.35)' : 'rgba(124,58,237,0.4)'}`,
-            color: saved ? '#4ade80' : '#a78bfa',
-            fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          {saving ? <Loader2 size={13} className="adm-spin" /> : saved ? <CheckCircle2 size={13} /> : <Save size={13} />}
-          {saving ? 'Saving\u2026' : saved ? 'Schema Saved!' : 'Save Schema'}
-        </button>
-      </div>
-    </div>
-  );
-};
-
 // ─── AdminDashboard ───────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [adminUser,  setAdminUser]  = useState(null);
@@ -514,43 +470,34 @@ export default function AdminDashboard() {
   const [loginBusy,  setLoginBusy]  = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [sessionRestoring, setRestoring] = useState(true);
-  const [activeTab, setActiveTab]   = useState('stations'); // 'stations' | 'users' | 'schema'
+  const [activeTab, setActiveTab]   = useState('stations');
 
-  // User management state
-  const [users,      setUsers]      = useState([]);
-  const [usersLoad,  setUsersLoad]  = useState(false);
-  const [schema,     setSchema]     = useState([]);
+  const [users,     setUsers]     = useState([]);
+  const [usersLoad, setUsersLoad] = useState(false);
 
   const { stations, isLoading, isError, refetch } = useStationData();
   const navigate = useNavigate();
   const zapRef   = useRef(null);
 
-  // ── Restore session from sessionStorage on mount ──────────────────────────
+  // Restore session from sessionStorage
   useEffect(() => {
     const token    = sessionStorage.getItem(SESSION_TOKEN_KEY);
     const userJson = sessionStorage.getItem(SESSION_USER_KEY);
     if (token && userJson) {
-      try {
-        const user = JSON.parse(userJson);
-        setAdminUser(user);
-        setAdminToken(token);
-      } catch { /* invalid json — ignore */ }
+      try { setAdminUser(JSON.parse(userJson)); setAdminToken(token); } catch {}
     }
-    // Also listen to Firebase auth in case they're still signed in via another tab
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       if (!firebaseUser) {
-        // Firebase session expired — clear local session
         sessionStorage.removeItem(SESSION_TOKEN_KEY);
         sessionStorage.removeItem(SESSION_USER_KEY);
-        setAdminUser(null);
-        setAdminToken(null);
+        setAdminUser(null); setAdminToken(null);
       }
       setRestoring(false);
     });
     return unsub;
   }, []);
 
-  // ── Zap icon hue animation ─────────────────────────────────────────────────
+  // Zap hue animation
   useEffect(() => {
     if (!zapRef.current || !adminUser) return;
     let h = 0;
@@ -561,29 +508,21 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [adminUser]);
 
-  // ── Load users + schema when users tab is opened ───────────────────────────
+  // Load users when Users tab is opened
   useEffect(() => {
-    if (activeTab !== 'users' && activeTab !== 'schema') return;
-    if (!adminUser) return;
-    const loadData = async () => {
-      setUsersLoad(true);
-      try {
-        const [u, s] = await Promise.all([listAllUsers(), getCustomSchema()]);
-        setUsers(u);
-        setSchema(s);
-      } catch (err) {
-        console.warn('[AdminDashboard] user/schema load failed:', err.message);
-      } finally { setUsersLoad(false); }
-    };
-    loadData();
+    if (activeTab !== 'users' || !adminUser) return;
+    setUsersLoad(true);
+    listAllUsers()
+      .then(setUsers)
+      .catch(err => console.warn('[AdminDashboard] users load failed:', err.message))
+      .finally(() => setUsersLoad(false));
   }, [activeTab, adminUser]);
 
   const handleLogout = async () => {
     await signOut(auth);
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_USER_KEY);
-    setAdminUser(null);
-    setAdminToken(null);
+    setAdminUser(null); setAdminToken(null);
     navigate('/', { replace: true });
   };
 
@@ -597,16 +536,12 @@ export default function AdminDashboard() {
         await signOut(auth); return;
       }
       const userObj = {
-        uid:         result.user.uid,
-        email:       result.user.email,
-        displayName: result.user.displayName,
-        photoURL:    result.user.photoURL,
+        uid: result.user.uid, email: result.user.email,
+        displayName: result.user.displayName, photoURL: result.user.photoURL,
       };
-      // Persist in sessionStorage so refresh keeps admin logged in
       sessionStorage.setItem(SESSION_TOKEN_KEY, token);
       sessionStorage.setItem(SESSION_USER_KEY,  JSON.stringify(userObj));
-      setAdminUser(userObj);
-      setAdminToken(token);
+      setAdminUser(userObj); setAdminToken(token);
     } catch (e) {
       setLoginError(e.message || 'Sign-in failed. Try again.');
     } finally { setLoginBusy(false); }
@@ -622,14 +557,7 @@ export default function AdminDashboard() {
     setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u));
   }, []);
 
-  const handleSchemaSave = useCallback(async (fields) => {
-    await saveCustomSchema(fields);
-    setSchema(fields);
-  }, []);
-
-  // Show blank while restoring session
   if (sessionRestoring) return null;
-
   if (!adminUser || !adminToken) {
     return <LoginPage onLogin={handleLogin} busy={loginBusy} error={loginError} />;
   }
@@ -640,9 +568,9 @@ export default function AdminDashboard() {
   const occupied  = stations.filter(s => s.status?.toLowerCase() === 'occupied').length;
   const util      = total ? Math.round(occupied / total * 100) : 0;
 
-  const TAB_STYLE = (active) => ({
+  const TAB = (active) => ({
     display: 'flex', alignItems: 'center', gap: 6,
-    padding: '8px 16px', borderRadius: 8, border: 'none',
+    padding: '8px 16px', borderRadius: 8,
     background: active ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.04)',
     border: `1px solid ${active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.08)'}`,
     color: active ? '#a78bfa' : 'rgba(255,255,255,0.4)',
@@ -654,15 +582,15 @@ export default function AdminDashboard() {
     <div className="adm-wrap">
       <NeonBg />
       <Navbar />
-
       <main className="adm-body" style={{ paddingTop: 72 }}>
+
         {/* Header */}
         <div className="adm-hdr">
           <div className="adm-hdr-l">
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
             <div>
               <h1 className="adm-title">STATION CONTROL</h1>
-              <p className="adm-sub">Live Google Sheets sync \u00b7 {adminUser.email}</p>
+              <p className="adm-sub">Live Google Sheets sync · {adminUser.email}</p>
             </div>
           </div>
           <div className="adm-hdr-r">
@@ -681,7 +609,7 @@ export default function AdminDashboard() {
           <div className="adm-div-line" />
         </div>
 
-        {/* Stat cards */}
+        {/* Stats */}
         <div className="sc-grid">
           <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
           <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
@@ -691,18 +619,15 @@ export default function AdminDashboard() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          <button style={TAB_STYLE(activeTab === 'stations')} onClick={() => setActiveTab('stations')}>
+          <button style={TAB(activeTab === 'stations')} onClick={() => setActiveTab('stations')}>
             <Gamepad2 size={14} /> Stations
           </button>
-          <button style={TAB_STYLE(activeTab === 'users')} onClick={() => setActiveTab('users')}>
+          <button style={TAB(activeTab === 'users')} onClick={() => setActiveTab('users')}>
             <Users size={14} /> Users
-          </button>
-          <button style={TAB_STYLE(activeTab === 'schema')} onClick={() => setActiveTab('schema')}>
-            <Settings size={14} /> Custom Fields
           </button>
         </div>
 
-        {/* ── STATIONS TAB ── */}
+        {/* Stations tab */}
         {activeTab === 'stations' && (
           <>
             {isLoading && (
@@ -742,25 +667,24 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* ── USERS TAB ── */}
+        {/* Users tab */}
         {activeTab === 'users' && (
           <div>
             {usersLoad ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '24px 0', color: 'rgba(255,255,255,0.4)' }}>
-                <Loader2 size={18} className="adm-spin" /> Loading users\u2026
+                <Loader2 size={18} className="adm-spin" /> Loading users…
               </div>
             ) : users.length === 0 ? (
               <div style={{ padding: '24px 0', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>No users found.</div>
             ) : (
               <div>
                 <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginBottom: 14 }}>
-                  {users.length} registered user{users.length !== 1 ? 's' : ''} \u00b7 Click a row to edit
+                  {users.length} registered user{users.length !== 1 ? 's' : ''} · Click a row to expand and edit
                 </p>
                 {users.map(u => (
                   <UserRow
                     key={u.uid}
                     user={u}
-                    schema={schema}
                     onUpdate={handleUserUpdate}
                     onRoleChange={handleRoleChange}
                   />
@@ -770,25 +694,6 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* ── SCHEMA TAB ── */}
-        {activeTab === 'schema' && (
-          <div style={{
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: 12, padding: '20px',
-          }}>
-            <h3 style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontSize: '1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: 6 }}>
-              \uD83D\uDCCB User Profile Schema
-            </h3>
-            {usersLoad ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 0', color: 'rgba(255,255,255,0.4)' }}>
-                <Loader2 size={16} className="adm-spin" /> Loading schema\u2026
-              </div>
-            ) : (
-              <SchemaEditor schema={schema} onSave={handleSchemaSave} />
-            )}
-          </div>
-        )}
       </main>
     </div>
   );
