@@ -53,13 +53,30 @@ const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
 function fmtSlot(slotStr) {
   const p = parseSlot(slotStr);
   if (!p) return slotStr;
-  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
 }
 
 function getDisplayName(station, isRacing) {
   if (station.stationName) return station.stationName;
   if (isRacing) return 'Racing Simulator';
   return `PS5 Station ${String(station.id).padStart(2, '0')}`;
+}
+
+function slotBtnBg(blocked, hovered, i, cfg) {
+  if (blocked) return 'rgba(255,255,255,0.03)';
+  if (hovered === i) {
+    const rgb = cfg.color === '#22c55e' ? '34,197,94'
+      : cfg.color === '#f59e0b' ? '245,158,11'
+      : '124,58,237';
+    return `rgba(${rgb},0.14)`;
+  }
+  return 'rgba(255,255,255,0.04)';
+}
+
+function slotBtnBorder(blocked, hovered, i, cfg) {
+  if (blocked) return '1px solid rgba(255,255,255,0.05)';
+  if (hovered === i) return `1px solid ${cfg.border}`;
+  return '1px solid rgba(255,255,255,0.08)';
 }
 
 /* ─── Slot Picker Step ─── */
@@ -69,7 +86,6 @@ function SlotPicker({ station, bookedSlots, cfg, onSelect, onBack }) {
 
   return (
     <div style={{ animation: 'sm-fade-up 0.22s ease both' }}>
-      {/* Back button */}
       <button
         onClick={onBack}
         style={{
@@ -112,21 +128,11 @@ function SlotPicker({ station, bookedSlots, cfg, onSelect, onBack }) {
               onMouseLeave={() => setHovered(null)}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '12px 14px', borderRadius: 10, border: 'none',
+                padding: '12px 14px', borderRadius: 10,
                 cursor: slot.blocked ? 'not-allowed' : 'pointer',
                 animation: `sm-slot-in 0.2s ${i * 40}ms ease both`,
-                background: slot.blocked
-                  ? 'rgba(255,255,255,0.03)'
-                  : hovered === i
-                    ? `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.14)`
-                    : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${
-                  slot.blocked
-                    ? 'rgba(255,255,255,0.05)'
-                    : hovered === i
-                      ? cfg.border
-                      : 'rgba(255,255,255,0.08)'
-                }`,
+                background: slotBtnBg(slot.blocked, hovered, i, cfg),
+                border: slotBtnBorder(slot.blocked, hovered, i, cfg),
                 transition: 'background .15s, border .15s',
                 width: '100%',
                 textAlign: 'left',
@@ -149,7 +155,9 @@ function SlotPicker({ station, bookedSlots, cfg, onSelect, onBack }) {
                 fontSize: '0.62rem', fontWeight: 700,
                 letterSpacing: '0.08em',
                 color: slot.blocked ? 'rgba(239,68,68,0.55)' : cfg.color,
-                background: slot.blocked ? 'rgba(239,68,68,0.08)' : `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.12)`,
+                background: slot.blocked
+                  ? 'rgba(239,68,68,0.08)'
+                  : `rgba(${cfg.color === '#22c55e' ? '34,197,94' : cfg.color === '#f59e0b' ? '245,158,11' : '124,58,237'},0.12)`,
                 border: `1px solid ${slot.blocked ? 'rgba(239,68,68,0.15)' : 'transparent'}`,
                 padding: '2px 8px', borderRadius: 5,
               }}>{slot.blocked ? 'BOOKED' : 'OPEN'}</span>
@@ -166,14 +174,13 @@ function SlotPicker({ station, bookedSlots, cfg, onSelect, onBack }) {
 }
 
 export default function StationModal({ station, stationIndex, onClose, onGameUpdate }) {
-  const [loading, setLoading]       = useState(false);
-  const [phoneGate, setPhoneGate]   = useState(false);
-  const [editing, setEditing]       = useState(false);
-  const [gameInput, setGameInput]   = useState('');
-  const [saving, setSaving]         = useState(false);
-  const [saveOk, setSaveOk]         = useState(false);
-  // 'info' | 'slots'
-  const [view, setView]             = useState('info');
+  const [loading, setLoading]     = useState(false);
+  const [phoneGate, setPhoneGate] = useState(false);
+  const [editing, setEditing]     = useState(false);
+  const [gameInput, setGameInput] = useState('');
+  const [saving, setSaving]       = useState(false);
+  const [saveOk, setSaveOk]       = useState(false);
+  const [view, setView]           = useState('info');
 
   const user  = useAuthStore(s => s.user);
   const phone = useAuthStore(s => s.phone);
@@ -206,7 +213,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
     : String(station.bookedSlots ?? '').split(',').map(s => s.trim()).filter(Boolean);
 
   const activeSlot  = station.activeSlot ?? null;
-  const nextSlot    = getNextSlot(slots, now);
   const futureSlots = slots.filter(s => {
     const p = parseSlot(s);
     return p && p.startMin > now;
@@ -214,17 +220,14 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   const liveGame = station.activeGame || null;
   const canEdit  = !!user && !!phone && !!activeSlot;
 
-  // Called when user picks a slot from the picker
   const handleSlotSelected = (slotValue) => {
     if (!user) { onClose(); navigate('/auth/login'); return; }
     if (!phone) { setPhoneGate(true); return; }
 
-    const ratePerHour = isRacing ? PRICE_RACING : PRICE_PS5;
-
     openPayment({
       type:   'booking',
-      label:  `${displayName} \u2014 1 Hour`,
-      amount: ratePerHour,
+      label:  `${displayName} — 1 Hour`,
+      amount: isRacing ? PRICE_RACING : PRICE_PS5,
       meta: {
         uid:           user?.uid ?? null,
         stationId:     station.id,
@@ -262,6 +265,8 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
     } finally { setSaving(false); }
   };
 
+  const price = isRacing ? PRICE_RACING : PRICE_PS5;
+
   return (
     <>
       <Dialog.Root open={!!station} onOpenChange={open => !open && onClose()}>
@@ -290,7 +295,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
               outline: 'none',
             }}
           >
-            {/* Animated top edge */}
             <div style={{
               height: 3, borderRadius: '18px 18px 0 0',
               background: `linear-gradient(90deg, transparent, ${cfg.color}, #a855f7, ${cfg.color}, transparent)`,
@@ -298,7 +302,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
             }} />
 
             <div style={{ padding: '22px 22px 26px' }}>
-              {/* Header — always shown */}
+              {/* Header */}
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:18, gap:12 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:13 }}>
                   <div style={{
@@ -320,7 +324,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       fontWeight:700, fontSize:'1.18rem',
                       color:'#fff', lineHeight:1.2, marginBottom:5,
                     }}>
-                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : displayName}
+                      {isRacing ? '🏁 Racing Simulator' : displayName}
                     </Dialog.Title>
                     <span style={{
                       display:'inline-flex', alignItems:'center', gap:5,
@@ -355,7 +359,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
               <div style={{ height:1, background:'rgba(255,255,255,0.06)', marginBottom:18 }} />
 
-              {/* ── VIEW: SLOT PICKER ── */}
+              {/* Slot Picker */}
               {view === 'slots' && (
                 <SlotPicker
                   station={station}
@@ -366,7 +370,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                 />
               )}
 
-              {/* ── VIEW: INFO ── */}
+              {/* Info view */}
               {view === 'info' && (
                 loading ? (
                   <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -379,7 +383,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                   </div>
                 ) : (
                   <>
-                    {/* LIVE NOW banner */}
+                    {/* LIVE NOW */}
                     {activeSlot && (
                       <div style={{
                         display:'flex', alignItems:'center', gap:10,
@@ -393,16 +397,15 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                         </span>
                         <div>
                           <div style={{ fontSize:'0.68rem', fontWeight:700, color:'#f87171', letterSpacing:'0.1em' }}>
-                            LIVE NOW \u00b7 {toAmPm(activeSlot.start24)} \u2013 {toAmPm(activeSlot.end24)}
+                            LIVE NOW · {toAmPm(activeSlot.start24)} – {toAmPm(activeSlot.end24)}
                           </div>
                           {liveGame && (
-                            <div style={{ fontSize:'0.82rem', color:'#fca5a5', marginTop:2 }}>\uD83C\uDFAE {liveGame}</div>
+                            <div style={{ fontSize:'0.82rem', color:'#fca5a5', marginTop:2 }}>🎮 {liveGame}</div>
                           )}
                         </div>
                         {canEdit && !editing && (
                           <button
                             onClick={() => { setGameInput(liveGame ?? ''); setEditing(true); }}
-                            title="Update current game"
                             style={{
                               marginLeft:'auto', display:'flex', alignItems:'center', gap:5,
                               padding:'4px 10px', borderRadius:7,
@@ -414,14 +417,14 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       </div>
                     )}
 
-                    {/* Inline game editor */}
+                    {/* Game editor */}
                     {editing && (
                       <div style={{ display:'flex', gap:7, marginBottom:14, animation:'sm-slot-in 0.2s ease both' }}>
                         <input
                           autoFocus value={gameInput}
                           onChange={e => setGameInput(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveGame(); if (e.key === 'Escape') setEditing(false); }}
-                          placeholder="Enter game name\u2026"
+                          placeholder="Enter game name…"
                           style={{
                             flex:1, padding:'8px 12px', borderRadius:8,
                             background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.14)',
@@ -436,13 +439,13 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                           opacity: saving ? 0.7 : 1,
                         }}>
                           {saving ? <Loader2 size={13} style={{ animation:'sm-spin .7s linear infinite' }} /> : <Check size={13} />}
-                          {saving ? 'Saving\u2026' : 'Save'}
+                          {saving ? 'Saving…' : 'Save'}
                         </button>
                         <button onClick={() => setEditing(false)} style={{
                           padding:'8px 12px', borderRadius:8,
                           background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)',
                           color:'rgba(255,255,255,0.5)', cursor:'pointer', fontSize:'0.8rem',
-                        }}>\u2715</button>
+                        }}>✕</button>
                       </div>
                     )}
 
@@ -459,7 +462,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                           fontSize:'0.83rem', color:'#4ade80', display:'flex', alignItems:'center', gap:8,
                         }}>
                           <Zap size={14} />
-                          {slots.length === 0 ? 'No bookings \u2014 walk in anytime!' : 'No more slots today'}
+                          {slots.length === 0 ? 'No bookings — walk in anytime!' : 'No more slots today'}
                         </div>
                       ) : (
                         <div style={{ display:'flex', flexDirection:'column', gap:7 }}>
@@ -502,7 +505,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
                     <div style={{ height:1, background:'rgba(255,255,255,0.06)', margin:'16px 0' }} />
 
-                    {/* Book button → opens slot picker */}
+                    {/* Book button */}
                     {!isOccupied && (
                       <button
                         onClick={handleBookClick}
@@ -522,7 +525,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                         onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)'; }}
                       >
                         <CreditCard size={16} />
-                        Book &amp; Pay \u20b9{isRacing ? PRICE_RACING : PRICE_PS5} via UPI
+                        Book &amp; Pay ₹{price} via UPI
                       </button>
                     )}
 
