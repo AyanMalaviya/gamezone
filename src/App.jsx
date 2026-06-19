@@ -6,6 +6,7 @@ import AuthPage from './pages/AuthPage';
 import AdminDashboard from './pages/AdminDashboard';
 import LandingPage from './pages/LandingPage';
 import ProfilePage from './pages/ProfilePage';
+import PricingPage from './pages/PricingPage';
 import GoogleProfileGate from './components/GoogleProfileGate';
 
 export const ADMIN_PATH = import.meta.env.VITE_ADMIN_SLUG || 'admin';
@@ -43,6 +44,7 @@ export default function App() {
       <Routes>
         <Route path="/"            element={<LandingPage />} />
         <Route path="/stations"    element={<StationLayout />} />
+        <Route path="/pricing"     element={<PricingPage />} />
         <Route path="/auth/:mode"  element={<AuthPage />} />
         <Route path="/profile"     element={<ProfilePage />} />
         <Route
