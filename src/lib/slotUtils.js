@@ -10,7 +10,7 @@
  * Internally we always work in minutes-since-midnight (24h IST).
  */
 
-// ── AM/PM → 24-hour string ──────────────────────────────────────────────
+// ── AM/PM → 24-hour string ──────────────────────────────────────────────────────
 export function to24h(timeStr) {
   if (!timeStr) return timeStr;
   const s = timeStr.trim().toUpperCase();
@@ -27,7 +27,7 @@ export function to24h(timeStr) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-// ── 24-hour string → display AM/PM ───────────────────────────────────────────
+// ── 24-hour string → display AM/PM ──────────────────────────────────────────────
 export function toAmPm(timeStr) {
   if (!timeStr) return timeStr;
   const s = timeStr.trim().toUpperCase();
@@ -38,7 +38,7 @@ export function toAmPm(timeStr) {
   return `${h12}:${String(m).padStart(2, '0')} ${suffix}`;
 }
 
-// ── Parse a single time string → minutes since midnight ──────────────────────
+// ── Parse a single time string → minutes since midnight ───────────────────────
 export function parseMinutes(timeStr) {
   const t24 = to24h(timeStr);
   const [h, m] = t24.split(':').map(Number);
@@ -114,8 +114,6 @@ export function stripExpiredSlots(slots, nowMin) {
 
 /**
  * Current time in minutes since midnight, computed in IST (UTC+5:30).
- * Using Intl.DateTimeFormat ensures correctness regardless of the
- * browser/server locale.
  */
 export function nowMinutes() {
   const now = new Date();
@@ -150,41 +148,44 @@ export function minutesToHHMM(min) {
 
 /**
  * Generate all 1-hour bookable slots for today in IST.
- * Default window: 09:00 – 23:00 (last slot 22:00-23:00).
- * Slots whose start hour <= current IST hour are excluded (can't book in the past).
+ * Window: 09:00 – 00:00 (last slot 23:00-00:00, stored as 23:00-24:00 internally).
+ *
+ * A slot is HIDDEN only if it has already fully ended (endMin <= currentMin).
+ * A slot that has already started (startMin <= currentMin < endMin) is shown as BLOCKED
+ * so the user knows it’s in progress, not just missing.
  *
  * Returns array of { label, value, startMin, endMin, blocked }
  *   value   = "HH:MM-HH:MM" (sheet format)
- *   blocked = true if slot overlaps with an already-booked slot
+ *   blocked = true if slot is in-progress OR overlaps a booked slot
  */
-export function generateBookableSlots(bookedSlots = [], openHour = 9, closeHour = 23) {
+export function generateBookableSlots(bookedSlots = [], openHour = 9, closeHour = 24) {
   const currentMin = nowMinutes();
   const slots = [];
 
   for (let h = openHour; h < closeHour; h++) {
     const startMin = h * 60;
     const endMin   = startMin + 60;
-    const start24  = `${String(h).padStart(2, '0')}:00`;
-    const end24    = `${String(h + 1).padStart(2, '0')}:00`;
-    const value    = `${start24}-${end24}`;
+    const start24  = `${String(h % 24).padStart(2, '0')}:00`;
+    const end24    = `${String((h + 1) % 24).padStart(2, '0')}:00`;
+    const value    = `${String(h % 24).padStart(2, '0')}:00-${String((h + 1) % 24).padStart(2, '0')}:00`;
 
-    // Skip past slots (already started or ended)
+    // Hide slots that have already fully ended
     if (endMin <= currentMin) continue;
 
-    // Check if this slot overlaps with any already-booked slot
-    const blocked = bookedSlots.some(bs => {
+    // Block slot if it has already started (in-progress) or overlaps a booked slot
+    const inProgress = startMin <= currentMin && currentMin < endMin;
+    const alreadyBooked = bookedSlots.some(bs => {
       const p = parseSlot(bs);
       if (!p) return false;
-      // Overlap: not (endMin <= p.startMin || startMin >= p.endMin)
       return !(endMin <= p.startMin || startMin >= p.endMin);
     });
 
     slots.push({
-      label:    `${toAmPm(start24)} – ${toAmPm(end24)}`,
+      label:    `${toAmPm(start24)} – ${toAmPm(end24 === '00:00' ? '24:00' : end24)}`,
       value,
       startMin,
       endMin,
-      blocked,
+      blocked: inProgress || alreadyBooked,
     });
   }
 
