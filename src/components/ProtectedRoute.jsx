@@ -1,3 +1,4 @@
+import { Navigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 
 const NeonSpinner = () => (
@@ -18,20 +19,29 @@ const NeonSpinner = () => (
 );
 
 /**
- * ProtectedRoute — renders `children` (not <Outlet />) so it works with
- * element={<ProtectedRoute><Page /></ProtectedRoute>} pattern.
+ * ProtectedRoute
  *
- * For admin routes, the AdminDashboard handles its own Google sign-in
- * internally, so we just show a spinner while loading and pass through.
+ * adminOnly=false (default) — requires any logged-in user.
+ *   Not logged in → redirect to /auth/login.
+ *
+ * adminOnly=true — requires role === 'admin'.
+ *   AdminDashboard has its OWN Google sign-in gate internally,
+ *   so we render children for any logged-in user and let the
+ *   dashboard page handle the admin-specific UI / access denial.
+ *   This prevents the dashboard from auto-logging out on refresh.
  */
-const ProtectedRoute = ({ children, adminOnly }) => {
+const ProtectedRoute = ({ children, adminOnly = false }) => {
   const loading = useAuthStore(s => s.loading);
+  const user    = useAuthStore(s => s.user);
 
-  // Wait for Firebase auth to resolve before rendering anything
+  // Wait for Firebase auth state to resolve
   if (loading) return <NeonSpinner />;
 
-  // For admin routes: AdminDashboard contains its own login gate,
-  // so we always render children and let the page manage access.
+  // Not logged in at all → send to login
+  if (!user) return <Navigate to="/auth/login" replace />;
+
+  // Admin route: render the page (AdminDashboard handles its own gate)
+  // Regular protected route: user is logged in, allow through
   return children;
 };
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -6,18 +6,19 @@ import {
   signInWithPopup,
   signOut,
   sendEmailVerification,
-} from "firebase/auth";
-import { auth, googleProvider } from "../lib/firebase";
-import { createUserProfile, getUserProfile, savePhoneNumber } from "./useUserProfile";
-import useAuthStore from "../store/authStore";
+  GoogleAuthProvider,
+} from 'firebase/auth';
+import { auth, googleProvider } from '../lib/firebase';
+import { createUserProfile, getUserProfile, savePhoneNumber } from './useUserProfile';
+import useAuthStore from '../store/authStore';
 
 // ─── Email login ──────────────────────────────────────────────────────────────
 export async function loginWithEmail(email, password) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
   if (!cred.user.emailVerified) {
     await signOut(auth);
-    throw Object.assign(new Error("Email not verified. Please check your inbox."), {
-      code: "auth/email-not-verified",
+    throw Object.assign(new Error('Email not verified. Please check your inbox.'), {
+      code: 'auth/email-not-verified',
     });
   }
   return cred;
@@ -29,8 +30,8 @@ export async function registerWithEmail(email, password, phoneOrName) {
   const isPhone = /^[+\d]/.test(phoneOrName);
   await createUserProfile(cred.user.uid, {
     email,
-    name: isPhone ? "" : phoneOrName,
-    phone: isPhone ? phoneOrName : "",
+    name:  isPhone ? '' : phoneOrName,
+    phone: isPhone ? phoneOrName : '',
   });
   await sendEmailVerification(cred.user);
   await signOut(auth); // force verify before login
@@ -41,41 +42,32 @@ export async function registerWithEmail(email, password, phoneOrName) {
 /**
  * loginWithGoogle
  *
- * Signs in via Google popup and:
- *  1. Creates a Firestore profile if first sign-in.
- *  2. Extracts the OAuth2 access_token from the credential and saves it
- *     to the Zustand store so AdminDashboard can use it for Sheets writes.
- *
- * The access_token is only available immediately after signInWithPopup —
- * it is NOT available later via onAuthStateChanged, which is why we must
- * capture it here.
+ * Captures the OAuth2 access_token immediately from the popup result
+ * (it is NOT available later via onAuthStateChanged) and stores it
+ * in Zustand for Sheets write operations.
  */
 export async function loginWithGoogle() {
-  const cred = await signInWithPopup(auth, googleProvider);
+  const result = await signInWithPopup(auth, googleProvider);
 
-  // Extract Google OAuth2 access_token (has spreadsheets scope)
-  const { OAuthCredential } = await import("firebase/auth");
-  // credential is a GoogleAuthCredential — accessToken lives on the result
-  const accessToken = cred._tokenResponse?.oauthAccessToken
-    ?? cred.user?.stsTokenManager?.accessToken
-    ?? null;
+  // Correct way to extract OAuth credential & access token
+  const credential  = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken ?? null;
 
-  // Persist token to Zustand store immediately
   if (accessToken) {
     useAuthStore.getState().setOauthToken(accessToken);
   }
 
-  // Create Firestore profile if it doesn't exist yet
-  const existing = await getUserProfile(cred.user.uid);
+  // Create Firestore profile on first sign-in
+  const existing = await getUserProfile(result.user.uid);
   if (!existing) {
-    await createUserProfile(cred.user.uid, {
-      email: cred.user.email,
-      name: cred.user.displayName || "",
-      phone: "",
+    await createUserProfile(result.user.uid, {
+      email: result.user.email,
+      name:  result.user.displayName || '',
+      phone: '',
     });
   }
 
-  return cred;
+  return result;
 }
 
 // ─── Phone helper ─────────────────────────────────────────────────────────────
@@ -84,13 +76,6 @@ export async function savePhone(uid, phone) {
 }
 
 // ─── App-level auth listener (App.jsx) ───────────────────────────────────────
-/**
- * useAuthListener
- *
- * Bootstraps Firebase auth state and populates the Zustand store.
- * Note: onAuthStateChanged does NOT provide the OAuth access_token —
- * that is captured once in loginWithGoogle() above.
- */
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
   const setRole    = useAuthStore(s => s.setRole);
@@ -106,7 +91,6 @@ export function useAuthListener() {
           setRole(prof?.role  ?? null);
           setPhone(prof?.phone ?? null);
         } catch (err) {
-          // Firestore read failed (e.g. offline) — degrade gracefully
           console.warn('[useAuthListener] profile fetch failed:', err.message);
           setRole(null);
           setPhone(null);
@@ -143,6 +127,5 @@ export function useAuth() {
   }, []);
 
   const logout = () => signOut(auth);
-
   return { user, profile, loading, logout };
 }

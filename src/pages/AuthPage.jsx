@@ -85,8 +85,11 @@ export default function AuthPage() {
   const [captchaDone, setCaptchaDone] = useState(false);
   const sliderRef = useRef(null);
 
+  // Redirect once logged in — Google users are always verified
   useEffect(() => {
-    if (!authLoading && user && user.emailVerified) navigate('/');
+    if (authLoading || !user) return;
+    const isGoogle = user.providerData?.some(p => p.providerId === 'google.com');
+    if (isGoogle || user.emailVerified) navigate('/', { replace: true });
   }, [user, authLoading, navigate]);
 
   useEffect(() => { navigate(`/auth/${tab}`, { replace: true }); }, [tab]); // eslint-disable-line
@@ -106,19 +109,21 @@ export default function AuthPage() {
   const friendly = (code = '', msg = '') => {
     const s = code + msg;
     if (s.includes('user-not-found') || s.includes('invalid-credential')) return 'No account found with those credentials.';
-    if (s.includes('wrong-password'))    return 'Incorrect password. Try again.';
-    if (s.includes('email-already'))     return 'Email already registered — try signing in.';
-    if (s.includes('weak-password'))     return 'Password must be at least 6 characters.';
-    if (s.includes('invalid-email'))     return 'Please enter a valid email address.';
-    if (s.includes('too-many-requests')) return 'Too many attempts. Wait a moment and retry.';
-    if (s.includes('email-not-verified'))return 'Email not verified. Check your inbox for the link.';
-    if (s.includes('network-request'))   return 'Network error. Check your connection.';
+    if (s.includes('wrong-password'))     return 'Incorrect password. Try again.';
+    if (s.includes('email-already'))      return 'Email already registered — try signing in.';
+    if (s.includes('weak-password'))      return 'Password must be at least 6 characters.';
+    if (s.includes('invalid-email'))      return 'Please enter a valid email address.';
+    if (s.includes('too-many-requests'))  return 'Too many attempts. Wait a moment and retry.';
+    if (s.includes('email-not-verified')) return 'Email not verified. Check your inbox for the link.';
+    if (s.includes('network-request'))    return 'Network error. Check your connection.';
+    if (s.includes('popup-closed'))       return 'Sign-in popup was closed. Please try again.';
+    if (s.includes('popup-blocked'))      return 'Popup blocked by browser. Please allow popups for this site.';
+    if (s.includes('unauthorized-domain'))return 'This domain is not authorised. Contact the admin.';
     return msg.replace('Firebase: ', '').replace(/\s*\(.*\)/, '') || 'Something went wrong.';
   };
 
-  // Validate phone only if user typed something (it's now optional)
   const validatePhone = (val) => {
-    if (!val.trim()) return null; // empty = optional, OK
+    if (!val.trim()) return null;
     const normalized = normalizePhone(val.trim());
     if (!/^\+91[6-9]\d{9}$/.test(normalized)) return 'Enter a valid 10-digit Indian mobile number.';
     return null;
@@ -146,8 +151,9 @@ export default function AuthPage() {
     try {
       if (isLogin) {
         await loginWithEmail(email, password);
+        // onAuthStateChanged in useAuthListener will pick up the user
+        // and navigate will fire via the useEffect above
       } else {
-        // Pass phone only if provided; otherwise empty string
         const normalized = phone.trim() ? normalizePhone(phone.trim()) : '';
         await registerWithEmail(email, password, normalized);
         setVerifyEmail(email);
@@ -161,8 +167,12 @@ export default function AuthPage() {
 
   const handleGoogle = async () => {
     setError(''); setBusy(true);
-    try { await loginWithGoogle(); }
-    catch (err) { setBusy(false); setError(friendly(err.code ?? '', err.message ?? '')); }
+    try {
+      await loginWithGoogle();
+      // redirect handled by useEffect watching user state
+    } catch (err) {
+      setError(friendly(err.code ?? '', err.message ?? ''));
+    } finally { setBusy(false); }
   };
 
   const isLogin = tab === 'login';
@@ -208,7 +218,6 @@ export default function AuthPage() {
               <p>{isLogin ? 'Sign in to access your GameZone' : 'Join GameZone and start playing'}</p>
             </div>
 
-            {/* Info banner */}
             <div style={{
               display:'flex', gap:8, alignItems:'flex-start',
               background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.22)',
@@ -263,7 +272,6 @@ export default function AuthPage() {
                 </div>
               </div>
 
-              {/* Phone — optional on register */}
               {!isLogin && (
                 <div className="auth-field">
                   <label htmlFor="auth-phone" style={{ display:'flex', alignItems:'center', gap:7 }}>

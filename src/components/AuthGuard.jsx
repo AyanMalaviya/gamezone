@@ -3,14 +3,15 @@ import { Navigate } from 'react-router-dom';
 
 /**
  * AuthGuard — wraps /auth/login and /auth/register.
- * If the user is ALREADY logged in, redirect them to home (no need to see login).
- * If NOT logged in, render the auth page normally.
+ * Redirects already-authenticated users away from auth pages.
+ *
+ * Google users: emailVerified is always true.
+ * Email users:  only redirect if emailVerified (prevents verified-gate bypass).
  */
 export default function AuthGuard({ children }) {
   const user    = useAuthStore(s => s.user);
   const loading = useAuthStore(s => s.loading);
 
-  // While Firebase is resolving auth state, show nothing (avoids flash)
   if (loading) {
     return (
       <div style={{
@@ -23,11 +24,14 @@ export default function AuthGuard({ children }) {
     );
   }
 
-  // Already authenticated → send home
-  if (user && user.emailVerified) {
-    return <Navigate to="/" replace />;
+  // Redirect if logged in via Google (providerData includes google.com)
+  // OR logged in via email AND email is verified
+  if (user) {
+    const isGoogle = user.providerData?.some(p => p.providerId === 'google.com');
+    if (isGoogle || user.emailVerified) {
+      return <Navigate to="/" replace />;
+    }
   }
 
-  // Not logged in → show login/register page
   return children;
 }
