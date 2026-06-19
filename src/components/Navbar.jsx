@@ -47,7 +47,7 @@ export default function Navbar() {
           {/* Logo */}
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <img
-              src="/logo.png"
+              src="/assets/images/logo.png"
               alt="GameZone logo"
               width="32" height="32"
               style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
