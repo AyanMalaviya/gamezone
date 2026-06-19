@@ -8,8 +8,8 @@ import { ADMIN_PATH } from '../App';
 const PUBLIC_NAV = [
   { label:'Home',     href:'/' },
   { label:'Stations', href:'/stations' },
-  { label:'Pricing',  href:'#pricing' },
-  { label:'Contact',  href:'#contact' },
+  { label:'Pricing',  href:'/pricing' },
+  { label:'Contact',  href:'/contact' },
 ];
 
 
