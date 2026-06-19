@@ -43,12 +43,11 @@ const BankChip = ({ id, onClick, active }) => {
   );
 };
 
-/** Format a slot value string "HH:MM-HH:MM" to AM/PM display */
 function fmtSlotLabel(slotValue) {
   if (!slotValue) return null;
   const p = parseSlot(slotValue);
   if (!p) return slotValue;
-  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
 }
 
 export default function UpiPaymentModal() {
@@ -136,7 +135,7 @@ export default function UpiPaymentModal() {
                     fontFamily:"'Rajdhani','Inter',sans-serif",
                     fontWeight:700, fontSize:'1.05rem', color:'#fff', lineHeight:1.2,
                   }}>UPI Payment</Dialog.Title>
-                  <div style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.35)', letterSpacing:'0.1em', marginTop:1 }}>SANDBOX \u00b7 TEST MODE</div>
+                  <div style={{ fontSize:'0.68rem', color:'rgba(255,255,255,0.35)', letterSpacing:'0.1em', marginTop:1 }}>SANDBOX · TEST MODE</div>
                 </div>
               </div>
               {step !== 'processing' && (
@@ -164,7 +163,6 @@ export default function UpiPaymentModal() {
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:'0.65rem', color:'rgba(255,255,255,0.4)', letterSpacing:'0.1em', marginBottom:4 }}>PAYING FOR</div>
                   <div style={{ fontSize:'0.92rem', color:'#e2d9f3', fontWeight:600 }}>{label}</div>
-                  {/* Show selected slot */}
                   {slotLabel && (
                     <div style={{
                       marginTop:6, display:'inline-flex', alignItems:'center', gap:5,
@@ -172,7 +170,7 @@ export default function UpiPaymentModal() {
                       background:'rgba(124,58,237,0.1)', border:'1px solid rgba(124,58,237,0.2)',
                       borderRadius:6, padding:'2px 8px',
                     }}>
-                      \uD83D\uDD50 {slotLabel}
+                      🕐 {slotLabel}
                     </div>
                   )}
                 </div>
@@ -181,7 +179,7 @@ export default function UpiPaymentModal() {
                   <div style={{
                     fontFamily:"'Rajdhani','Inter',sans-serif",
                     fontSize:'1.6rem', fontWeight:800, color:'#a78bfa', lineHeight:1,
-                  }}>\u20b9{amt.toLocaleString('en-IN')}</div>
+                  }}>₹{amt.toLocaleString('en-IN')}</div>
                 </div>
               </div>
             </div>
@@ -226,7 +224,7 @@ export default function UpiPaymentModal() {
                 }}>
                   <Shield size={13} color="#fbbf24" style={{ flexShrink:0 }} />
                   <span style={{ fontSize:'0.72rem', color:'rgba(245,158,11,0.85)', lineHeight:1.4 }}>
-                    <strong>Test mode</strong> \u2014 No real money moves. This simulates the UPI payment flow.
+                    <strong>Test mode</strong> — No real money moves. This simulates the UPI payment flow.
                   </span>
                 </div>
                 <button onClick={handlePay} style={{
@@ -255,7 +253,7 @@ export default function UpiPaymentModal() {
                   animation:'upi-pulse 1.4s ease-in-out infinite',
                 }}><Loader2 size={28} color="#a78bfa" style={{ animation:'upi-spin 0.8s linear infinite' }} /></div>
                 <div style={{ fontFamily:"'Rajdhani','Inter',sans-serif", fontSize:'1.1rem', fontWeight:700, color:'#fff', marginBottom:6 }}>Processing Payment</div>
-                <div style={{ fontSize:'0.8rem', color:'rgba(255,255,255,0.4)' }}>Contacting {upiId} \u00b7 Please wait\u2026</div>
+                <div style={{ fontSize:'0.8rem', color:'rgba(255,255,255,0.4)' }}>Contacting {upiId} · Please wait…</div>
                 <div style={{ marginTop:20, height:3, borderRadius:99, background:'rgba(255,255,255,0.07)', overflow:'hidden' }}>
                   <div style={{ height:'100%', background:'linear-gradient(90deg, #7c3aed, #a855f7)', borderRadius:99, animation:'upi-bar 2s ease-in-out forwards' }} />
                 </div>
@@ -282,8 +280,8 @@ export default function UpiPaymentModal() {
                     ['Transaction ID', receipt.txnId],
                     ['UPI ID',         receipt.upiId],
                     ['Bank',           receipt.bank],
-                    ['Amount',         `\u20b9${receipt.amount.toLocaleString('en-IN')}`],
-                    ['Status',         'SUCCESS \u2713'],
+                    ['Amount',         `₹${receipt.amount.toLocaleString('en-IN')}`],
+                    ['Status',         'SUCCESS ✓'],
                     ['Time',           new Date(receipt.timestamp).toLocaleTimeString('en-IN', { timeZone:'Asia/Kolkata' })],
                   ].filter(Boolean).map(([k, v]) => (
                     <div key={k} style={{

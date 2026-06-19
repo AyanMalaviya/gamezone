@@ -5,7 +5,7 @@ import { X, Clock, Gamepad2, Zap, Monitor, Loader2, Edit3, Check, CreditCard, Ch
 import useAuthStore from '../store/authStore';
 import usePaymentStore from '../store/paymentStore';
 import CompleteProfileModal from './CompleteProfileModal';
-import { parseSlot, toAmPm, nowMinutes, getNextSlot, generateStartTimes, minutesToHHMM } from '../lib/slotUtils';
+import { parseSlot, toAmPm, nowMinutes, generateStartTimes, minutesToHHMM } from '../lib/slotUtils';
 
 const STYLE_ID = 'sm-keyframes';
 function injectKeyframes() {
@@ -54,7 +54,7 @@ const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
 function fmtSlot(slotStr) {
   const p = parseSlot(slotStr);
   if (!p) return slotStr;
-  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
 }
 
 function getDisplayName(station, isRacing) {
@@ -69,7 +69,7 @@ function colorRgb(cfg) {
   return '124,58,237';
 }
 
-/* ─── Step 1 — Pick Start Time ─── */
+/* Step 1 - Pick Start Time */
 function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
   const [hovered, setHovered] = useState(null);
   const rgb = colorRgb(cfg);
@@ -132,7 +132,7 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
   );
 }
 
-/* ─── Step 2 — Pick Duration ─── */
+/* Step 2 - Pick Duration */
 function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, onConfirm, onBack }) {
   const closeHour = 24;
   const maxFromClose = Math.floor((closeHour * 60 - startTime.startMin) / 60);
@@ -173,13 +173,11 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         </span>
       </div>
 
-      {/* Start time badge */}
       <div style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em' }}>START</span>
         <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1rem', color: cfg.color }}>{startTime.label}</span>
       </div>
 
-      {/* Hour buttons — single border key only */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
         {durations.map(d => (
           <button
@@ -200,7 +198,6 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         ))}
       </div>
 
-      {/* Summary */}
       <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 18, background: `rgba(${rgb},0.06)`, border: `1px solid ${cfg.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SESSION</span>
@@ -236,7 +233,7 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
         onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; }}
       >
-        <CreditCard size={16} /> Book &amp; Pay ₹{totalAmt} via UPI
+        <CreditCard size={16} /> Book & Pay ₹{totalAmt} via UPI
       </button>
     </div>
   );
@@ -288,8 +285,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   const futureSlots = slots.filter(s => { const p = parseSlot(s); return p && p.startMin > now; });
   const liveGame    = station.activeGame || null;
   const canEdit     = !!user && !!phone && !!activeSlot;
-
-  const startTimes = generateStartTimes(slots);
+  const startTimes  = generateStartTimes(slots);
 
   const handleBookClick = () => {
     if (!user) { onClose(); navigate('/auth/login'); return; }
@@ -302,7 +298,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
     setView('duration');
   };
 
-  const handleConfirmBooking = ({ slotValue, totalAmt, hours, endLabel }) => {
+  const handleConfirmBooking = ({ slotValue, totalAmt, hours }) => {
     openPayment({
       type:   'booking',
       label:  `${displayName} — ${hours} hr${hours > 1 ? 's' : ''}`,
@@ -364,7 +360,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
             <div style={{ height: 3, borderRadius: '18px 18px 0 0', background: `linear-gradient(90deg, transparent, ${cfg.color}, #a855f7, ${cfg.color}, transparent)`, backgroundSize: '200% 100%', animation: 'sm-edge 2.2s linear infinite' }} />
             <div style={{ padding: '22px 22px 26px' }}>
 
-              {/* Header */}
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
                   <div style={{ width: 54, height: 54, borderRadius: '50%', flexShrink: 0, background: cfg.bg, border: `2px solid ${cfg.border}`, boxShadow: `0 0 18px ${cfg.glow}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 800, fontSize: '1.25rem', color: '#fff' }}>
@@ -372,7 +367,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                   </div>
                   <div>
                     <Dialog.Title style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1.18rem', color: '#fff', lineHeight: 1.2, marginBottom: 5 }}>
-                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : displayName}
+                      {isRacing ? '🏁 Racing Simulator' : displayName}
                     </Dialog.Title>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, display: 'inline-block', animation: key !== 'available' ? 'sm-pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
@@ -390,7 +385,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
               <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 18 }} />
 
-              {/* Rate info pill */}
               {(view === 'info' || view === 'start') && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 10px' }}>
@@ -489,7 +483,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                         onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                         onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; }}
                       >
-                        <CreditCard size={16} /> Book &amp; Pay ₹{ratePerHour}/hr via UPI
+                        <CreditCard size={16} /> Book & Pay ₹{ratePerHour}/hr via UPI
                       </button>
                     )}
 
