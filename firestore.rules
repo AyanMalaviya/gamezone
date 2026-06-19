@@ -2,19 +2,57 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users: read/write own profile only
+    // ── Users ──────────────────────────────────────────────────────────────
+    // Read/write own profile only. Admin can read all profiles.
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
-      // Admin can read all user profiles
       allow read: if request.auth != null
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Stations: public read, admin write only
+    // ── Stations ───────────────────────────────────────────────────────────
+    // Public read (live availability). Admin write only.
     match /stations/{stationId} {
       allow read: if true;
       allow write: if request.auth != null
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+
+    // ── Bookings ───────────────────────────────────────────────────────────
+    // Authenticated users can create bookings.
+    // Users can only read their own bookings.
+    // Admin can read and write all bookings.
+    match /bookings/{bookingId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+
+      allow read: if request.auth != null
+        && (
+          resource.data.uid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        );
+
+      allow update, delete: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── Payments ───────────────────────────────────────────────────────────
+    // Authenticated users can create payment records.
+    // Users can read their own payment records.
+    // Admin can read and write all payment records.
+    match /payments/{paymentId} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid;
+
+      allow read: if request.auth != null
+        && (
+          resource.data.uid == request.auth.uid
+          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        );
+
+      allow update, delete: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
   }
 }
