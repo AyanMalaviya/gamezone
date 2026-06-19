@@ -23,7 +23,7 @@ const S = {
     soft: 'rgba(34,197,94,0.11)',
     bg:   'rgba(34,197,94,0.07)',
     label: '#22c55e',
-    text: 'FREE',
+    text: 'AVAILABLE',
   },
   occupied: {
     ring: '#ef4444',
@@ -31,7 +31,7 @@ const S = {
     soft: 'rgba(239,68,68,0.11)',
     bg:   'rgba(239,68,68,0.07)',
     label: '#ef4444',
-    text: 'IN USE',
+    text: 'OCCUPIED',
   },
   racing: {
     ring: '#f59e0b',
