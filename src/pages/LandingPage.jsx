@@ -99,11 +99,64 @@ const GAMES = [
   'Returnal', 'Ratchet & Clank', "Demon's Souls", 'Resident Evil 4',
 ];
 
+const PRICING = [
+  {
+    id: 'ps5',
+    label: 'PS5 Setup',
+    price: 100,
+    unit: 'per hour',
+    accent: '#a855f7',
+    accentDim: 'rgba(168,85,247,0.18)',
+    accentBorder: 'rgba(168,85,247,0.35)',
+    badge: null,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
+        <rect x="2" y="6" width="20" height="14" rx="2" />
+        <path d="M8 6V4h8v2" />
+        <circle cx="12" cy="13" r="1.5" fill="currentColor" />
+        <path d="M9 10v6M15 10v6M6 13h3M15 13h3" />
+      </svg>
+    ),
+    perks: [
+      'Sony PlayStation 5 console',
+      '27″ 4K 165 Hz curved display',
+      'DualSense haptic controller',
+      'Access to 80+ game titles',
+      'Private station, no time sharing',
+    ],
+  },
+  {
+    id: 'racing',
+    label: 'Racing Simulator',
+    price: 250,
+    unit: 'per hour',
+    accent: '#c026d3',
+    accentDim: 'rgba(192,38,211,0.18)',
+    accentBorder: 'rgba(192,38,211,0.45)',
+    badge: 'PREMIUM',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="28" height="28">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="12" cy="12" r="3" fill="currentColor" opacity="0.4" />
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+      </svg>
+    ),
+    perks: [
+      'Full cockpit racing rig',
+      'Force-feedback steering wheel',
+      'Clutch + brake + throttle pedals',
+      'Wraparound immersive display',
+      'Gran Turismo 7 & more titles',
+    ],
+  },
+];
+
 export default function LandingPage() {
   const [authModal, setAuthModal] = useState(null);
   const [statsRef, statsInView]   = useInView(0.3);
   const [featRef, featInView]     = useInView(0.1);
   const [gamesRef, gamesInView]   = useInView(0.2);
+  const [pricingRef, pricingInView] = useInView(0.15);
   const heroRef = useRef(null);
 
   /* Particle canvas */
@@ -154,12 +207,8 @@ export default function LandingPage() {
       {/* ════════ HERO ════════ */}
       <section className="hero-section" ref={heroRef}>
         <canvas id="hero-particles" className="hero-canvas" aria-hidden="true" />
-
-        {/* Radial glow blobs */}
         <div className="hero-blob hero-blob-1" aria-hidden="true" />
         <div className="hero-blob hero-blob-2" aria-hidden="true" />
-
-        {/* Grid overlay */}
         <div className="hero-grid" aria-hidden="true" />
 
         <div className="hero-content">
@@ -193,12 +242,9 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Scroll indicator */}
         <div className="hero-scroll" aria-hidden="true">
           <div className="scroll-bar"><div className="scroll-thumb" /></div>
         </div>
-
-        {/* Diagonal slice bottom */}
         <div className="hero-slice" aria-hidden="true" />
       </section>
 
@@ -263,8 +309,76 @@ export default function LandingPage() {
         <div className="ticker-bottom-slash" />
       </section>
 
+      {/* ════════ PRICING ════════ */}
+      <section className="pricing-section" id="pricing" ref={pricingRef}>
+        <div className="section-header">
+          <p className="section-eyebrow">Simple pricing</p>
+          <h2 className="section-title">Pay per hour. <span className="section-title-accent">No hidden fees.</span></h2>
+        </div>
+
+        <div className="pricing-grid">
+          {PRICING.map((plan, i) => (
+            <div
+              key={plan.id}
+              className={`pricing-card${pricingInView ? ' pricing-card-visible' : ''}`}
+              style={{
+                '--pc-accent': plan.accent,
+                '--pc-accent-dim': plan.accentDim,
+                '--pc-accent-border': plan.accentBorder,
+                '--pc-delay': `${i * 150}ms`,
+              }}
+            >
+              {/* running animated border */}
+              <div className="pc-running-border" />
+
+              {plan.badge && (
+                <div className="pc-badge">{plan.badge}</div>
+              )}
+
+              <div className="pc-icon" style={{ color: plan.accent }}>{plan.icon}</div>
+
+              <h3 className="pc-label">{plan.label}</h3>
+
+              <div className="pc-price-row">
+                <span className="pc-currency">₹</span>
+                <span className="pc-amount">{plan.price}</span>
+                <span className="pc-unit">/{plan.unit}</span>
+              </div>
+
+              <div className="pc-divider" />
+
+              <ul className="pc-perks">
+                {plan.perks.map(perk => (
+                  <li key={perk} className="pc-perk">
+                    <svg className="pc-check" viewBox="0 0 16 16" fill="none" width="14" height="14">
+                      <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {perk}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                className="pc-cta"
+                onClick={() => setAuthModal('register')}
+              >
+                Book Now
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p className="pricing-note">
+          Walk-ins welcome · No membership required · Pay at the counter or book online
+        </p>
+      </section>
+
       {/* ════════ CTA BANNER ════════ */}
-      <section className="cta-banner" id="pricing">
+      <section className="cta-banner">
         <div className="cta-banner-glow" />
         <div className="cta-banner-border" />
         <div className="cta-banner-inner">
