@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { updateStation, appendBookingToSheet } from '../lib/sheets';
+import { appendBookingToSheet } from '../lib/sheets';
 import useAuthStore from './authStore';
 
 /* ─── Test UPI IDs ─── */
@@ -56,38 +56,14 @@ async function saveBookingToFirestore(uid, context, receipt) {
   }
 }
 
-/* ─── Update station row in Sheets after payment ───
- * Reads oauthToken directly from Zustand — no longer relies on context.meta.oauthToken.
+/*
+ * NOTE: Station row update in Sheets (marking occupied/booked slots) is
+ * intentionally NOT triggered here. It is an admin-only concern and requires
+ * an admin OAuth token. The admin dashboard handles station state via
+ * Firestore real-time updates + explicit admin actions in AdminDashboard.
+ *
+ * The Bookings tab append below captures the full booking record for the log.
  */
-async function updateSheetsAfterPayment(context, oauthToken) {
-  if (!oauthToken) {
-    if (import.meta.env.DEV) console.warn('[paymentStore] updateSheetsAfterPayment: no OAuth token, skipping.');
-    return;
-  }
-  const meta = context.meta ?? {};
-  const { stationIndex } = meta;
-  if (stationIndex == null) return;
-
-  try {
-    const existingSlots = Array.isArray(meta.bookedSlots) ? meta.bookedSlots : [];
-    const updatedSlots  = meta.slot
-      ? [...new Set([...existingSlots, meta.slot])]
-      : existingSlots;
-
-    await updateStation(stationIndex, {
-      id:            meta.stationId     ?? '',
-      stationName:   meta.stationName   ?? '',
-      stationType:   meta.stationType   ?? 'ps5',
-      status:        'occupied',
-      activeSlot:    meta.slot          ?? null,
-      bookedSlots:   updatedSlots,
-      currentGame:   meta.game          ?? '',
-      preferredGame: meta.preferredGame ?? '',
-    }, oauthToken);
-  } catch (err) {
-    console.warn('[paymentStore] Sheets station update failed:', err.message);
-  }
-}
 
 const usePaymentStore = create((set, get) => ({
   isOpen:  false,
@@ -104,23 +80,20 @@ const usePaymentStore = create((set, get) => ({
     const { context } = get();
     if (!context) return;
 
-    // ✔ Read oauthToken from Zustand store — works for both Google and email users
-    const oauthToken = useAuthStore.getState().oauthToken;
+    const oauthToken = useAuthStore.getState().oauthToken;  // null for email users — that's fine
     const uid        = useAuthStore.getState().user?.uid ?? context.meta?.uid ?? null;
+    const orderId    = 'ORD-' + Date.now();
 
-    const orderId = 'ORD-' + Date.now();
     set({ step: 'processing', error: null });
 
     try {
       const receipt = await simulateUpiPayment({ upiId, amount: context.amount, orderId });
 
-      // 1. Save booking to Firestore (non-blocking)
+      // 1. Save to Firestore — always works, no OAuth needed
       saveBookingToFirestore(uid, context, receipt);
 
-      // 2. Update station row in Google Sheets (non-blocking)
-      updateSheetsAfterPayment(context, oauthToken);
-
-      // 3. Append booking log row to Sheets Bookings tab (non-blocking)
+      // 2. Append booking log row to Sheets Bookings tab
+      //    Works for Google users via oauthToken, for email users via VITE_SHEETS_SERVICE_KEY
       appendBookingToSheet({
         txnId:       receipt.txnId,
         uid:         uid ?? '',
