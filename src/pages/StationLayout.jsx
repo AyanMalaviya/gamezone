@@ -44,38 +44,40 @@ export default function StationLayout() {
         `,
       }} />
 
-      {/* paddingTop: 72px pushes content below the fixed navbar */}
       <main style={{
         flex: 1, position: 'relative', zIndex: 1,
-        paddingTop: 72,
         padding: '72px clamp(16px,3vw,32px) 56px',
       }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
-          {/* Title */}
-          <div style={{ textAlign: 'center', marginBottom: 'clamp(24px,4vw,40px)' }}>
-            <h1 style={{
-              fontFamily: "'Rajdhani','Inter',sans-serif",
-              fontWeight: 800,
-              fontSize: 'clamp(1.6rem,4vw,2.6rem)',
-              letterSpacing: '-0.02em',
-              color: '#fff', lineHeight: 1.1, marginBottom: 8,
+          {/* Subtitle only — no redundant GAMEZONE title since Navbar has the logo */}
+          <div style={{ textAlign: 'center', marginBottom: 'clamp(16px,3vw,32px)' }}>
+            <p style={{
+              color: 'rgba(255,255,255,0.35)',
+              fontSize: 'clamp(0.6rem,1.1vw,0.78rem)',
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
             }}>
-              GAME<span style={{ color: '#7c3aed' }}>ZONE</span>
-            </h1>
-            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 'clamp(0.6rem,1.1vw,0.78rem)', letterSpacing: '0.14em', textTransform: 'uppercase' }}>
               Live Station Availability · Click any station
             </p>
             {!isLoading && !isError && (
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap: 20, marginTop: 14, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap: 20, marginTop: 10, flexWrap:'wrap' }}>
                 {[
                   { color: '#22c55e', label: `${available} Available` },
                   { color: '#ef4444', label: `${occupied} Occupied` },
                   { color: '#f59e0b', label: `${rowRacing.length} Racing Sim` },
                 ].map(({ color, label }) => (
                   <div key={label} style={{ display:'flex', alignItems:'center', gap: 6 }}>
-                    <span style={{ width: 7, height: 7, borderRadius:'50%', background: color, boxShadow:`0 0 5px ${color}`, display:'inline-block', flexShrink:0 }} />
-                    <span style={{ fontSize: 'clamp(0.62rem,1vw,0.72rem)', color: 'rgba(255,255,255,0.4)', letterSpacing:'0.05em' }}>{label}</span>
+                    <span style={{
+                      width: 7, height: 7, borderRadius:'50%',
+                      background: color, boxShadow:`0 0 5px ${color}`,
+                      display:'inline-block', flexShrink:0,
+                    }} />
+                    <span style={{
+                      fontSize: 'clamp(0.62rem,1vw,0.72rem)',
+                      color: 'rgba(255,255,255,0.4)',
+                      letterSpacing:'0.05em',
+                    }}>{label}</span>
                   </div>
                 ))}
               </div>
@@ -131,7 +133,11 @@ export default function StationLayout() {
                 </div>
                 <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center' }}>
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap: 5 }}>
-                    <span style={{ fontSize:'clamp(0.48rem,0.9vw,0.58rem)', fontWeight:700, letterSpacing:'0.12em', textTransform:'uppercase', color:'rgba(245,158,11,0.5)' }}>🏁 Racing</span>
+                    <span style={{
+                      fontSize:'clamp(0.48rem,0.9vw,0.58rem)', fontWeight:700,
+                      letterSpacing:'0.12em', textTransform:'uppercase',
+                      color:'rgba(245,158,11,0.5)',
+                    }}>🏁 Racing</span>
                     {rowRacing.map(s => <StationCircle key={s.id} station={s} onClick={setSelected} />)}
                   </div>
                 </div>
@@ -142,7 +148,10 @@ export default function StationLayout() {
             )}
           </div>
 
-          <p style={{ textAlign:'center', marginTop:14, fontSize:'0.62rem', color:'rgba(255,255,255,0.16)', letterSpacing:'0.06em' }}>
+          <p style={{
+            textAlign:'center', marginTop:14,
+            fontSize:'0.62rem', color:'rgba(255,255,255,0.16)', letterSpacing:'0.06em',
+          }}>
             Auto-refreshes every 30 seconds
           </p>
         </div>

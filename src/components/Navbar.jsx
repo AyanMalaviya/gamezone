@@ -11,26 +11,6 @@ const PUBLIC_NAV = [
   { label:'Contact',  href:'#contact' },
 ];
 
-function GZLogo() {
-  return (
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-label="GameZone logo">
-      <defs>
-        <linearGradient id="lgn" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#a855f7" />
-          <stop offset="100%" stopColor="#6d28d9" />
-        </linearGradient>
-        <filter id="glow-logo">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-      <rect width="40" height="40" rx="10" fill="url(#lgn)" filter="url(#glow-logo)" />
-      <path d="M10 20 L16 12 L24 12 L24 17 L20 17 L20 14 L17 14 L13 20 L17 26 L20 26 L20 23 L24 23 L24 28 L16 28 Z" fill="white" />
-      <path d="M26 16 L30 16 L30 18 L28 18 L28 22 L30 22 L30 24 L26 24 L26 22 L27 22 L27 18 L26 18 Z" fill="rgba(255,255,255,0.7)" />
-    </svg>
-  );
-}
-
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobile] = useState(false);
@@ -66,8 +46,13 @@ export default function Navbar() {
         <div className="navbar-inner">
 
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
-            <GZLogo />
-            <span className="navbar-logo-text">GAME<span className="navbar-logo-accent">ZONE</span></span>
+            <img
+              src="/favicon.ico"
+              alt="GameZone"
+              width="36"
+              height="36"
+              style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
+            />
           </Link>
 
           <nav className="navbar-links" aria-label="Primary navigation">
@@ -90,7 +75,6 @@ export default function Navbar() {
           <div className="navbar-auth">
             {user ? (
               <>
-                {/* Profile link with phone indicator */}
                 <Link to="/profile" style={{
                   display:'flex', alignItems:'center', gap:6,
                   padding:'5px 10px', borderRadius:8,
@@ -105,7 +89,6 @@ export default function Navbar() {
                 >
                   <UserCircle2 size={15} />
                   <span>{user.email?.split('@')[0]}</span>
-                  {/* Red dot if no phone */}
                   {!phone && (
                     <span title="Add phone number to book" style={{
                       width:7, height:7, borderRadius:'50%',
@@ -122,7 +105,6 @@ export default function Navbar() {
                     }}>ADMIN</span>
                   )}
                 </Link>
-
                 <button className="navbar-btn navbar-btn-ghost" onClick={logout}>Sign out</button>
               </>
             ) : (
