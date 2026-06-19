@@ -241,7 +241,7 @@ export default function UpiPaymentModal() {
                 }}
                   onMouseEnter={e => { e.currentTarget.style.opacity='0.88'; e.currentTarget.style.transform='translateY(-1px)'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity='1'; e.currentTarget.style.transform='translateY(0)'; }}
-                ><Zap size={16} /> PAY \u20b9{amt.toLocaleString('en-IN')}</button>
+                ><Zap size={16} /> PAY ₹{amt.toLocaleString('en-IN')}</button>
               </div>
             )}
 
