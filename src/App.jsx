@@ -9,11 +9,15 @@ import ProfilePage from './pages/ProfilePage';
 import PricingPage from './pages/PricingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import AuthGuard from './components/AuthGuard';
+import { useAuthListener } from './hooks/useAuth';
 
 /* Named export consumed by Navbar.jsx */
 export const ADMIN_PATH = 'admin';
 
 export default function App() {
+  // Bootstraps Firebase auth state → populates Zustand store (user, role, phone, loading)
+  useAuthListener();
+
   return (
     <BrowserRouter>
       {/* Global UPI payment modal — rendered once at app root */}
