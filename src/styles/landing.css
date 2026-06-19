@@ -129,12 +129,10 @@
   flex-shrink: 0;
 }
 .navbar-logo-text {
-  font-family: 'Rajdhani', sans-serif;
-  font-weight: 700;
-  font-size: 1.25rem;
-  letter-spacing: 0.1em;
-  color: var(--text-primary);
-  user-select: none;
+  font-family: 'Orbitron', 'Rajdhani', sans-serif;  /* ← change this line */
+  font-weight: 900;
+  font-size: 1.3rem;   /* Orbitron is wider, so slightly smaller looks cleaner */
+  letter-spacing: 0.05em;
 }
 .navbar-logo-accent {
   color: var(--neon-purple);
