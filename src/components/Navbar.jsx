@@ -44,14 +44,13 @@ export default function Navbar() {
         <div className="navbar-scan" />
         <div className="navbar-inner">
 
-          {/* Logo */}
+          {/* Logo — use favicon.ico which is guaranteed to exist */}
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <img
-              src="/assets/images/logo.png"
+              src="/favicon.ico"
               alt="GameZone logo"
               width="32" height="32"
               style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
-              onError={e => { e.currentTarget.src = '/favicon.ico'; }}
             />
             <span className="navbar-logo-text">
               GAME<span className="navbar-logo-accent">ZONE</span>

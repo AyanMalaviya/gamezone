@@ -127,10 +127,10 @@ export default function Footer() {
       <div className="gz-footer-inner">
         <div className="gz-footer-top">
 
-          {/* Brand */}
+          {/* Brand — use favicon.ico which is guaranteed to exist */}
           <div className="gz-footer-brand">
             <Link to="/" className="gz-footer-logo">
-              <img src="/logo.png" alt="GameZone" onError={e => { e.currentTarget.src = '/favicon.ico'; }} />
+              <img src="/favicon.ico" alt="GameZone" />
               <span>GAMEZONE</span>
             </Link>
             <p className="gz-footer-tagline">
@@ -160,11 +160,11 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="gz-footer-bottom">
-          <span className="gz-footer-copy">
+        <div class="gz-footer-bottom">
+          <span class="gz-footer-copy">
             &copy; {year} GameZone. All rights reserved.
           </span>
-          <div className="gz-footer-legal">
+          <div class="gz-footer-legal">
             <Link to="/privacy">Privacy Policy</Link>
             <Link to="/terms">Terms &amp; Conditions</Link>
           </div>
