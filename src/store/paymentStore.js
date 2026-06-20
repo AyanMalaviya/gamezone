@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { appendBookingToSheet } from '../lib/sheets';
+import { appendBookingToSheet, updateStationOnBooking } from '../lib/sheets';
 import useAuthStore from './authStore';
 
 /* ─── Test UPI IDs ─── */
@@ -56,15 +56,6 @@ async function saveBookingToFirestore(uid, context, receipt) {
   }
 }
 
-/*
- * NOTE: Station row update in Sheets (marking occupied/booked slots) is
- * intentionally NOT triggered here. It is an admin-only concern and requires
- * an admin OAuth token. The admin dashboard handles station state via
- * Firestore real-time updates + explicit admin actions in AdminDashboard.
- *
- * The Bookings tab append below captures the full booking record for the log.
- */
-
 const usePaymentStore = create((set, get) => ({
   isOpen:  false,
   context: null,
@@ -80,7 +71,8 @@ const usePaymentStore = create((set, get) => ({
     const { context } = get();
     if (!context) return;
 
-    const oauthToken = useAuthStore.getState().oauthToken;  // null for email users — that's fine
+    // oauthToken is null for email users — writeHeaders() in sheets.js falls back to VITE_SHEETS_SERVICE_KEY
+    const oauthToken = useAuthStore.getState().oauthToken;
     const uid        = useAuthStore.getState().user?.uid ?? context.meta?.uid ?? null;
     const orderId    = 'ORD-' + Date.now();
 
@@ -92,8 +84,11 @@ const usePaymentStore = create((set, get) => ({
       // 1. Save to Firestore — always works, no OAuth needed
       saveBookingToFirestore(uid, context, receipt);
 
-      // 2. Append booking log row to Sheets Bookings tab
-      //    Works for Google users via oauthToken, for email users via VITE_SHEETS_SERVICE_KEY
+      // 2. Update station row in Sheets — marks occupied + adds booked slot
+      //    Uses oauthToken (Google users) OR VITE_SHEETS_SERVICE_KEY (email users)
+      updateStationOnBooking(context.meta ?? {}, oauthToken);
+
+      // 3. Append booking log row to Sheets Bookings tab
       appendBookingToSheet({
         txnId:       receipt.txnId,
         uid:         uid ?? '',

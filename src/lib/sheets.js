@@ -1,11 +1,9 @@
 /**
  * sheets.js — Google Sheets API integration
  *
- * ALL writes use a Google Service Account API key stored in VITE_SHEETS_SERVICE_KEY.
- * This means Sheets writes work for ALL users (email + Google) without needing
- * an OAuth token on the client side.
- *
- * Read-only calls use VITE_SHEETS_API_KEY (public, restricted to Sheets API).
+ * Write auth priority:
+ *   1. oauthToken  (Google-signed-in admin or member)
+ *   2. VITE_SHEETS_SERVICE_KEY  (service account — works for all users)
  *
  * "Stations" tab column layout (A–H):
  *   A  Station ID   B  Station Name   C  Type   D  Status
@@ -27,28 +25,22 @@ const BOOKINGS_SHEET_TITLE = 'Bookings';
 let sheetTitlePromise;
 
 const getSheetsEnv = () => {
-  const sheetId    = import.meta.env.VITE_SHEETS_ID;
-  const apiKey     = import.meta.env.VITE_SHEETS_API_KEY;
+  const sheetId = import.meta.env.VITE_SHEETS_ID;
+  const apiKey  = import.meta.env.VITE_SHEETS_API_KEY;
   if (!sheetId) throw new Error('VITE_SHEETS_ID is not set.');
   if (!apiKey)  throw new Error('VITE_SHEETS_API_KEY is not set.');
   return { apiKey, sheetId };
 };
 
 /**
- * writeHeaders — auth header for Sheets write requests.
- * Prefers oauthToken if provided (admin Google sign-in).
- * Falls back to VITE_SHEETS_SERVICE_KEY (service account key) for all other users.
- * If neither is available, returns null and the caller should skip the write.
+ * writeHeaders — auth headers for Sheets write requests.
+ * Prefers oauthToken (Google sign-in). Falls back to VITE_SHEETS_SERVICE_KEY.
+ * Returns null if neither is available — callers should skip the write.
  */
 const writeHeaders = (oauthToken) => {
-  if (oauthToken) {
-    return { 'Authorization': `Bearer ${oauthToken}`, 'Content-Type': 'application/json' };
-  }
-  const serviceKey = import.meta.env.VITE_SHEETS_SERVICE_KEY;
-  if (serviceKey) {
-    return { 'Authorization': `Bearer ${serviceKey}`, 'Content-Type': 'application/json' };
-  }
-  return null; // no write credentials available
+  const token = oauthToken || import.meta.env.VITE_SHEETS_SERVICE_KEY || null;
+  if (!token) return null;
+  return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 };
 
 const getSheetTitle = async () => {
@@ -127,8 +119,7 @@ export const getStations = async () => {
 };
 
 /**
- * updateStation — admin-only, called from AdminDashboard to mark a station
- * occupied/available. Always uses oauthToken (admin is always Google signed-in).
+ * updateStation — admin-only explicit save from AdminDashboard.
  */
 export const updateStation = async (rowIndex, data, oauthToken) => {
   const hdrs = writeHeaders(oauthToken);
@@ -174,6 +165,66 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
   return res.json();
 };
 
+/**
+ * updateStationOnBooking — called automatically after a successful payment.
+ * Adds the newly booked slot to F (Booked Slots) and sets the station occupied.
+ * Uses VITE_SHEETS_SERVICE_KEY so it works for ALL users, not just Google sign-in.
+ *
+ * meta shape: { stationIndex, stationId, stationName, stationType,
+ *               slot, game, preferredGame, bookedSlots, activeSlot }
+ */
+export const updateStationOnBooking = async (meta, oauthToken) => {
+  const hdrs = writeHeaders(oauthToken);
+  if (!hdrs) {
+    if (import.meta.env.DEV)
+      console.warn('[sheets] updateStationOnBooking: no write credentials. Set VITE_SHEETS_SERVICE_KEY in .env.');
+    return;
+  }
+
+  const { stationIndex } = meta;
+  if (stationIndex == null) {
+    if (import.meta.env.DEV) console.warn('[sheets] updateStationOnBooking: stationIndex missing in meta.');
+    return;
+  }
+
+  try {
+    const { sheetId } = getSheetsEnv();
+    const sheetTitle  = await getSheetTitle();
+    const sheetRow    = Number(stationIndex) + 2; // +1 for header, +1 for 1-based
+
+    const existingSlots = Array.isArray(meta.bookedSlots) ? meta.bookedSlots : [];
+    const updatedSlots  = meta.slot
+      ? [...new Set([...existingSlots, meta.slot])]
+      : existingSlots;
+
+    const range  = `${sheetTitle}!A${sheetRow}:H${sheetRow}`;
+    const values = [[
+      meta.stationId     ?? '',
+      meta.stationName   ?? '',
+      meta.stationType   ?? 'ps5',
+      'occupied',
+      serializeActiveSlot(meta.slot ?? meta.activeSlot ?? null),
+      serializeBookedSlots(updatedSlots),
+      meta.game          ?? '',
+      meta.preferredGame ?? '',
+    ]];
+
+    const res = await fetch(
+      `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
+      { method: 'PUT', headers: hdrs, body: JSON.stringify({ majorDimension: 'ROWS', range, values }) }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('[sheets] updateStationOnBooking failed:', err?.error?.message ?? res.status);
+    } else {
+      if (import.meta.env.DEV) console.info('[sheets] Station row updated after booking:', meta.stationName);
+    }
+  } catch (e) {
+    console.warn('[sheets] updateStationOnBooking error:', e.message);
+  }
+};
+
 // ─── Shared append helper ──────────────────────────────────────────────────────
 
 const istNow = () => new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
@@ -182,13 +233,11 @@ async function appendRows(sheetTitle, header, values, oauthToken) {
   const hdrs = writeHeaders(oauthToken);
   if (!hdrs) {
     if (import.meta.env.DEV)
-      console.warn(`[sheets] appendRows(${sheetTitle}): no write credentials (no oauthToken and VITE_SHEETS_SERVICE_KEY not set). Add VITE_SHEETS_SERVICE_KEY to .env to enable writes for non-Google users.`);
+      console.warn(`[sheets] appendRows(${sheetTitle}): no write credentials. Set VITE_SHEETS_SERVICE_KEY in .env.`);
     return;
   }
   try {
     const { sheetId, apiKey } = getSheetsEnv();
-
-    // Check if header exists
     const checkRes  = await fetch(
       `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(sheetTitle)}!A1?key=${apiKey}`
     );
@@ -203,7 +252,7 @@ async function appendRows(sheetTitle, header, values, oauthToken) {
     }
 
     const range = `${sheetTitle}!A:${String.fromCharCode(64 + header.length)}`;
-    const res = await fetch(
+    const res   = await fetch(
       `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
       { method: 'POST', headers: hdrs, body: JSON.stringify({ majorDimension: 'ROWS', range, values }) }
     );
@@ -232,11 +281,10 @@ export const updateUserPhoneInSheet = async (uid, phone, oauthToken) => {
     const { sheetId, apiKey } = getSheetsEnv();
     const res  = await fetch(`${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(USERS_SHEET_TITLE)}!A:A?key=${apiKey}`);
     if (!res.ok) return;
-    const data = await res.json();
-    const rows = data?.values ?? [];
-    const rowIdx = rows.findIndex(r => r[0] === uid);
+    const data   = await res.json();
+    const rowIdx = (data?.values ?? []).findIndex(r => r[0] === uid);
     if (rowIdx === -1) return;
-    const range = `${USERS_SHEET_TITLE}!D${rowIdx + 1}`;
+    const range  = `${USERS_SHEET_TITLE}!D${rowIdx + 1}`;
     await fetch(
       `${SHEETS_BASE_URL}/${sheetId}/values/${encodeURIComponent(range)}?valueInputOption=RAW`,
       { method: 'PUT', headers: hdrs, body: JSON.stringify({ majorDimension: 'ROWS', range, values: [[phone]] }) }
@@ -251,10 +299,6 @@ export const updateUserPhoneInSheet = async (uid, phone, oauthToken) => {
 
 const BOOKINGS_HEADER = ['TXN ID', 'UID', 'Station', 'Slot', 'Hours', 'Amount (₹)', 'UPI ID', 'Bank', 'Status', 'Booked At'];
 
-/**
- * appendBookingToSheet — called after every successful payment.
- * Works for ALL users (email + Google) via service key fallback.
- */
 export const appendBookingToSheet = async ({
   txnId, uid, stationName, slot, hours, amount, upiId, bank, status,
 }, oauthToken) => {
