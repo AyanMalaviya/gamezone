@@ -8,9 +8,9 @@
  *   - At slot start: Apps Script -> Active Slot (E), status = occupied
  *   - At slot end:   Apps Script clears E, status = available
  *
- * "Stations" tab column layout (A–H):
- *   A=1 Station ID   B=2 Station Name   C=3 Type   D=4 Status
- *   E=5 Active Slot  F=6 Booked Slots   G=7 Current Game  H=8 Preferred Game
+ * "Stations" tab layout (row 1 = header, row 2 = subtitle/info, row 3+ = data):
+ *   A  Station ID   B  Station Name   C  Type   D  Status
+ *   E  Active Slot  F  Booked Slots   G  Current Game  H  Preferred Game
  *
  * "Users" tab column layout (A–F):
  *   A  UID   B  Name   C  Email   D  Phone   E  Role   F  Joined At
@@ -22,6 +22,12 @@
 
 const SHEETS_BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 const STATION_COLUMNS = 'A:H';
+
+// Number of non-data rows at the top of the Stations tab:
+//   row 1 = column headers
+//   row 2 = subtitle / info row  (no numeric Station ID)
+// Data rows start at row 3, so we slice off the first 2 rows.
+const HEADER_ROWS = 2;
 
 let sheetTitlePromise;
 
@@ -73,7 +79,6 @@ const normaliseStatus = (raw) => {
  *   7  Preferred Game  (H)
  */
 const mapStationRow = (row = []) => {
-  // Active Slot: expect "HH:MM-HH:MM"
   const activeSlotRaw = String(row[4] ?? '').trim();
   let activeSlot = null;
   if (activeSlotRaw) {
@@ -82,15 +87,15 @@ const mapStationRow = (row = []) => {
   }
 
   return {
-    id:            String(row[0] ?? '').trim(),            // A
-    stationName:   String(row[1] ?? '').trim(),            // B
-    stationType:   String(row[2] ?? '').trim().toLowerCase() || 'ps5', // C
-    status:        normaliseStatus(row[3]),                // D
-    activeSlot,                                            // E (parsed)
-    bookedSlots:   parseBookedSlots(row[5]),               // F
-    currentGame:   String(row[6] ?? '').trim(),            // G
-    preferredGame: String(row[7] ?? '').trim(),            // H
-    activeGame:    String(row[6] ?? '').trim(),            // alias for G
+    id:            String(row[0] ?? '').trim(),                          // A
+    stationName:   String(row[1] ?? '').trim(),                          // B
+    stationType:   String(row[2] ?? '').trim().toLowerCase() || 'ps5',  // C
+    status:        normaliseStatus(row[3]),                              // D
+    activeSlot,                                                          // E (parsed)
+    bookedSlots:   parseBookedSlots(row[5]),                             // F
+    currentGame:   String(row[6] ?? '').trim(),                          // G
+    preferredGame: String(row[7] ?? '').trim(),                          // H
+    activeGame:    String(row[6] ?? '').trim(),                          // alias for G
   };
 };
 
@@ -106,10 +111,11 @@ export const getStations = async () => {
   const data = await res.json();
   const rows = data?.values ?? [];
 
-  // rows[0] is the header row — skip it
-  // Only keep rows where column A is a numeric station ID
+  // Skip the first HEADER_ROWS rows (row 1 = header, row 2 = subtitle).
+  // Also guard with a numeric check on column A so any stray non-data
+  // rows (empty rows, notes, etc.) are safely ignored.
   const validRows = rows
-    .slice(1)
+    .slice(HEADER_ROWS)
     .filter(row => row && row[0] && !isNaN(Number(String(row[0]).trim())));
 
   // Deduplicate by station ID (keep first occurrence)
