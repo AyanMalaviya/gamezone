@@ -37,8 +37,8 @@ const statusConfig = {
 const isRacingStation = (s) =>
   String(s?.id) === '8' || String(s?.stationType).toLowerCase() === 'racing';
 
-const PRICE_RACING = 250;
-const PRICE_PS5    = 100;
+const PRICE_RACING    = 250;
+const PRICE_PS5       = 100;
 const MAX_HOURS_RACING = 2;
 const MAX_HOURS_PS5    = 4;
 
@@ -133,25 +133,38 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
 }
 
 /* Step 2 - Pick Duration */
-function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, onConfirm, onBack }) {
-  const closeHour = 24;
-  const maxFromClose = Math.floor((closeHour * 60 - startTime.startMin) / 60);
-  const cap = Math.min(maxHours, maxFromClose);
-  const rgb = colorRgb(cfg);
+function DurationPicker({ startTime, cfg, ratePerHour, maxHours, onConfirm, onBack }) {
+  const closeMin  = 24 * 60;
+  // Max hours = min(maxHours, hours left before close, first blocked offset)
+  const maxFromClose = Math.floor((closeMin - startTime.startMin) / 60);
+  let cap = Math.min(maxHours, maxFromClose);
 
-  let availableCap = cap;
-  for (let d = 1; d <= cap; d++) {
-    if (startTime.blockedOffsets.has(d)) { availableCap = d; break; }
+  // Find first blocked 60-min chunk: any 10-min segment within [offset*60, offset*60+60)
+  // being blocked means we can't go past that hour
+  for (let h = 0; h < cap; h++) {
+    // offsets in terms of 10-min steps: [h*6 .. h*6+5]
+    let hourBlocked = false;
+    for (let step = h * 6; step < (h + 1) * 6; step++) {
+      if (startTime.blockedOffsets.has(step)) { hourBlocked = true; break; }
+    }
+    if (hourBlocked) { cap = h; break; }
   }
 
-  const durations = Array.from({ length: availableCap }, (_, i) => i + 1);
-  const [selected, setSelected] = useState(1);
+  const durations = Array.from({ length: cap }, (_, i) => i + 1);
+  const [selected, setSelected] = useState(Math.min(1, cap));
 
-  const endMin    = startTime.startMin + selected * 60;
-  const endH      = Math.floor(endMin / 60) % 24;
-  const end24     = `${String(endH).padStart(2, '0')}:00`;
-  const totalAmt  = selected * ratePerHour;
-  const slotValue = `${startTime.start24}-${minutesToHHMM(endMin)}`;
+  // Re-clamp selected if cap changed
+  const safeSel   = Math.min(selected, cap);
+  const endMin    = startTime.startMin + safeSel * 60;
+  const end24     = minutesToHHMM(endMin);
+  const totalAmt  = safeSel * ratePerHour;
+  const slotValue = `${startTime.start24}-${end24}`;
+
+  if (cap === 0) return (
+    <div style={{ padding: '18px 14px', borderRadius: 10, textAlign: 'center', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.18)', fontSize: '0.85rem', color: 'rgba(239,68,68,0.75)', animation: 'sm-fade-up .2s ease both' }}>
+      No duration available from this start time. Choose a different start.
+    </div>
+  );
 
   return (
     <div style={{ animation: 'sm-fade-up 0.22s ease both' }}>
@@ -178,16 +191,16 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1rem', color: cfg.color }}>{startTime.label}</span>
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
         {durations.map(d => (
           <button
             key={d}
             onClick={() => setSelected(d)}
             style={{
-              flex: 1, padding: '14px 0', borderRadius: 10,
-              border: `1.5px solid ${selected === d ? cfg.border : 'rgba(255,255,255,0.08)'}`,
-              background: selected === d ? `rgba(${rgb},0.2)` : 'rgba(255,255,255,0.05)',
-              color: selected === d ? cfg.color : 'rgba(255,255,255,0.45)',
+              flex: 1, minWidth: 60, padding: '14px 0', borderRadius: 10,
+              border: `1.5px solid ${safeSel === d ? cfg.border : 'rgba(255,255,255,0.08)'}`,
+              background: safeSel === d ? `rgba(${colorRgb(cfg)},0.2)` : 'rgba(255,255,255,0.05)',
+              color: safeSel === d ? cfg.color : 'rgba(255,255,255,0.45)',
               cursor: 'pointer', transition: 'all .15s',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
             }}
@@ -198,7 +211,7 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
         ))}
       </div>
 
-      <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 18, background: `rgba(${rgb},0.06)`, border: `1px solid ${cfg.border}` }}>
+      <div style={{ padding: '12px 14px', borderRadius: 10, marginBottom: 18, background: `rgba(${colorRgb(cfg)},0.06)`, border: `1px solid ${cfg.border}` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SESSION</span>
           <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, color: '#e2e8f0', fontSize: '0.9rem' }}>
@@ -212,12 +225,12 @@ function DurationPicker({ startTime, bookedSlots, cfg, ratePerHour, maxHours, on
           </span>
         </div>
         <div style={{ marginTop: 4, fontSize: '0.62rem', color: 'rgba(255,255,255,0.25)' }}>
-          ₹{ratePerHour}/hr × {selected} hr{selected > 1 ? 's' : ''}
+          ₹{ratePerHour}/hr × {safeSel} hr{safeSel > 1 ? 's' : ''}
         </div>
       </div>
 
       <button
-        onClick={() => onConfirm({ slotValue, totalAmt, hours: selected, endLabel: toAmPm(end24) })}
+        onClick={() => onConfirm({ slotValue, totalAmt, hours: safeSel, endLabel: toAmPm(end24) })}
         style={{
           width: '100%', padding: '13px', borderRadius: 11, border: 'none',
           background: cfg.color === '#f59e0b'
@@ -249,8 +262,8 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   const [view, setView]           = useState('info');
   const [selectedStart, setSelectedStart] = useState(null);
 
-  const user  = useAuthStore(s => s.user);
-  const phone = useAuthStore(s => s.phone);
+  const user     = useAuthStore(s => s.user);
+  const phone    = useAuthStore(s => s.phone);
   const navigate = useNavigate();
   const openPayment = usePaymentStore(s => s.openPayment);
 
@@ -270,13 +283,13 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
   const isRacing   = isRacingStation(station);
   const isOccupied = station.status?.toLowerCase() === 'occupied' || !!station.activeSlot;
-  const key = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
-  const cfg = statusConfig[key];
+  const key        = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
+  const cfg        = statusConfig[key];
   const displayName = getDisplayName(station, isRacing);
   const ratePerHour = isRacing ? PRICE_RACING : PRICE_PS5;
   const maxHours    = isRacing ? MAX_HOURS_RACING : MAX_HOURS_PS5;
 
-  const now = nowMinutes();
+  const now        = nowMinutes();
   const slots = Array.isArray(station.bookedSlots)
     ? station.bookedSlots.filter(Boolean)
     : String(station.bookedSlots ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -299,6 +312,11 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   };
 
   const handleConfirmBooking = ({ slotValue, totalAmt, hours }) => {
+    // stationIndex is passed from StationLayout via handleSelect —
+    // it is the SORTED array index (0-based), which matches the Sheets row offset.
+    // Fallback to Number(station.id)-1 only when stationIndex is genuinely absent.
+    const resolvedIndex = stationIndex != null ? Number(stationIndex) : Number(station.id) - 1;
+
     openPayment({
       type:   'booking',
       label:  `${displayName} — ${hours} hr${hours > 1 ? 's' : ''}`,
@@ -307,13 +325,15 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
         uid:           user?.uid ?? null,
         stationId:     station.id,
         stationName:   displayName,
-        stationIndex:  stationIndex != null ? stationIndex : Number(station.id) - 1,
+        stationIndex:  resolvedIndex,
         stationType:   station.stationType || (isRacing ? 'racing' : 'ps5'),
         slot:          slotValue,
         hours,
         game:          station.preferredGame || station.currentGame || '',
-        currentGame:   station.currentGame  || '',
-        preferredGame: station.preferredGame || '',
+        currentGame:   station.currentGame   || '',
+        preferredGame: station.preferredGame  || '',
+        currentStatus: station.status         || 'available',
+        activeSlot:    station.activeSlot      ?? null,
         bookedSlots:   slots,
         isRacing,
       },
@@ -397,7 +417,14 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                 <StartTimePicker startTimes={startTimes} cfg={cfg} onSelect={handleStartSelected} onBack={() => setView('info')} />
               )}
               {view === 'duration' && selectedStart && (
-                <DurationPicker startTime={selectedStart} bookedSlots={slots} cfg={cfg} ratePerHour={ratePerHour} maxHours={maxHours} onConfirm={handleConfirmBooking} onBack={() => setView('start')} />
+                <DurationPicker
+                  startTime={selectedStart}
+                  cfg={cfg}
+                  ratePerHour={ratePerHour}
+                  maxHours={maxHours}
+                  onConfirm={handleConfirmBooking}
+                  onBack={() => setView('start')}
+                />
               )}
 
               {view === 'info' && (
@@ -465,7 +492,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                     </div>
 
                     {!activeSlot && station.currentGame && (
-                      <div style={{ marginBottom: station.preferredGame ? 16 : 0 }}>
+                      <div style={{ marginBottom: 16 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
                           <Monitor size={13} color="rgba(255,255,255,0.35)" />
                           <span style={{ fontSize: '0.63rem', fontWeight: 700, letterSpacing: '0.13em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>Currently Playing</span>

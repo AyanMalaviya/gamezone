@@ -1,6 +1,6 @@
 /**
  * slotUtils.js
- * Pure helpers for slot parsing, AM/PM ↔ 24-hour conversion,
+ * Pure helpers for slot parsing, AM/PM ⇔ 24-hour conversion,
  * and determining which slot is active right now.
  */
 
@@ -97,46 +97,71 @@ export function minutesToHHMM(min) {
 }
 
 /**
- * Generate available START times for today (1-hour grid).
- * A start hour is included if:
- *   - it hasn’t fully passed (startMin >= currentMin)
- *   - at least 1 hour of consecutive unbloced time exists from it
- *     (i.e. the 1-hour slot starting here is not booked)
+ * nextStartMinute — returns the next bookable start minute from now.
  *
- * maxHours = maximum consecutive hours bookable (ps5=4, racing=2)
- * openHour / closeHour = operating window
+ * Rule:
+ *   - Start from the current IST minute.
+ *   - Round UP to the next multiple of STEP (10 min).
+ *   - But the very first option must have MM in {10,20,30,40,50,00}.
+ *     i.e. if now = 14:03 -> first option = 14:10
+ *        if now = 14:12 -> first option = 14:20
+ *        if now = 14:55 -> first option = 15:00
  *
- * Returns array of:
- *   { startMin, start24, label, bookedHours }
- *   bookedHours = Set of hour offsets (0,1,2…) from startMin that are already taken
+ * This is the first entry in the start-time list. Subsequent entries
+ * increment by STEP until closeHour.
+ */
+const STEP = 10; // minutes
+
+function ceilToStep(min, step) {
+  return Math.ceil(min / step) * step;
+}
+
+/**
+ * generateStartTimes — produces start-time options in 10-minute increments.
+ *
+ * First option  = ceil(nowMinutes, 10)  -- so always at a :10/:20/:30/etc boundary
+ * Subsequent    = +10 min each
+ * Skipped if    = the 60-min window starting there overlaps an existing booking
+ * Stops at      = closeHour (default 24:00)
+ *
+ * Each entry:
+ *   { startMin, start24, label, blockedOffsets }
+ *   blockedOffsets = Set of 10-min offsets from startMin that are blocked
+ *                    (used by DurationPicker to cap selectable hours)
  */
 export function generateStartTimes(bookedSlots = [], openHour = 9, closeHour = 24) {
-  const currentMin = nowMinutes();
+  const currentMin  = nowMinutes();
+  const closingMin  = closeHour * 60;
+
+  // First candidate: round current minute up to next STEP boundary
+  // but never earlier than openHour
+  const openMin     = openHour * 60;
+  const firstMin    = Math.max(openMin, ceilToStep(currentMin, STEP));
+
   const results = [];
 
-  for (let h = openHour; h < closeHour; h++) {
-    const startMin = h * 60;
-    // Skip if this hour has already started
-    if (startMin < currentMin) continue;
-    // Skip if no room for even 1 hour before close
-    if (startMin + 60 > closeHour * 60) continue;
+  for (let startMin = firstMin; startMin + 60 <= closingMin; startMin += STEP) {
+    const h      = Math.floor(startMin / 60);
+    const m      = startMin % 60;
+    const start24 = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 
-    const start24 = `${String(h % 24).padStart(2, '0')}:00`;
-
-    // Work out which hour-offsets from this start are blocked by existing bookings
+    // For each 10-min offset up to close, record if it's blocked
+    const maxOffsets = Math.floor((closingMin - startMin) / STEP);
     const blockedOffsets = new Set();
-    for (let offset = 0; offset < (closeHour - h); offset++) {
-      const slotStart = startMin + offset * 60;
-      const slotEnd   = slotStart + 60;
+
+    for (let offset = 0; offset < maxOffsets; offset++) {
+      const chunkStart = startMin + offset * STEP;
+      const chunkEnd   = chunkStart + STEP;
       const blocked = bookedSlots.some(bs => {
         const p = parseSlot(bs);
         if (!p) return false;
-        return !(slotEnd <= p.startMin || slotStart >= p.endMin);
+        // overlap check
+        return !(chunkEnd <= p.startMin || chunkStart >= p.endMin);
       });
       if (blocked) blockedOffsets.add(offset);
     }
 
-    // Only show this start time if the first hour itself is free
+    // Skip this start time if the very first 10-min chunk (offset 0) is already blocked
     if (blockedOffsets.has(0)) continue;
 
     results.push({ startMin, start24, label: toAmPm(start24), blockedOffsets });
@@ -146,8 +171,7 @@ export function generateStartTimes(bookedSlots = [], openHour = 9, closeHour = 2
 }
 
 /**
- * Generate bookable slot objects (legacy, used by getActiveSlot display).
- * Still used in StationModal for the "upcoming slots" list.
+ * generateBookableSlots (legacy, still used for the upcoming-slots display list).
  */
 export function generateBookableSlots(bookedSlots = [], openHour = 9, closeHour = 24) {
   const currentMin = nowMinutes();
