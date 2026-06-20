@@ -92,20 +92,33 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── Locked cell — used for Station ID, Name, Type (never editable) ───────────────
+// ─── LockedCell — read-only display with lock icon ─────────────────────────────────
 const LockedCell = ({ value, title }) => (
-  <span title={title ?? 'This field is locked and cannot be edited'} style={{
-    display: 'inline-flex', alignItems: 'center', gap: 5,
-    fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)',
-    fontWeight: 600, userSelect: 'none',
-  }}>
+  <span
+    title={title ?? 'Locked — edit directly in Google Sheets'}
+    style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)',
+      fontWeight: 600, userSelect: 'none', cursor: 'default',
+    }}
+  >
     {value || '—'}
-    <Lock size={10} color="rgba(255,255,255,0.2)" />
+    <Lock size={10} color="rgba(255,255,255,0.18)" />
   </span>
 );
 
 // ─── StationRow ───────────────────────────────────────────────────────────────────────
-const StationRow = ({ station, rowIndex }) => {
+//
+// LOCKED fields (never in form state, never sent to GAS):
+//   station.id            — col A  (used as the GAS lookup key)
+//   station.stationName   — col B
+//   station.stationType   — col C
+//   station.preferredGame — col H
+//
+// EDITABLE fields (form state, sent to GAS):
+//   status, activeSlot, bookedSlots, currentGame
+//
+const StationRow = ({ station }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
     if (typeof slot === 'string') return slot;
@@ -113,15 +126,13 @@ const StationRow = ({ station, rowIndex }) => {
     return '';
   };
 
-  // Only editable fields — id, stationName, stationType are LOCKED and never sent
   const init = () => ({
-    status:        station.status        || 'available',
-    activeSlot:    serSlot(station.activeSlot),
-    bookedSlots:   Array.isArray(station.bookedSlots)
-                     ? station.bookedSlots.join(', ')
-                     : (station.bookedSlots || ''),
-    currentGame:   station.currentGame   || '',
-    preferredGame: station.preferredGame || '',
+    status:      station.status      || 'available',
+    activeSlot:  serSlot(station.activeSlot),
+    bookedSlots: Array.isArray(station.bookedSlots)
+                   ? station.bookedSlots.join(', ')
+                   : (station.bookedSlots || ''),
+    currentGame: station.currentGame || '',
   });
 
   const [form, setForm]     = useState(init);
@@ -129,7 +140,6 @@ const StationRow = ({ station, rowIndex }) => {
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(null);
 
-  // Re-sync editable fields when live data refreshes
   useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
 
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
@@ -137,17 +147,13 @@ const StationRow = ({ station, rowIndex }) => {
   const onSave = async () => {
     setSaving(true); setErr(null);
     try {
-      // id, stationName, stationType are read from the station prop (locked source of truth)
-      // They are NEVER taken from the form so they can’t drift
-      await gasUpdateStation(rowIndex, {
-        id:            station.id          ?? '',   // 🔒 locked — always from sheet
-        stationName:   station.stationName ?? '',   // 🔒 locked — always from sheet
-        stationType:   station.stationType ?? 'ps5',// 🔒 locked — always from sheet
-        status:        form.status,
-        activeSlot:    form.activeSlot     || null,
-        bookedSlots:   form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
-        currentGame:   form.currentGame,
-        preferredGame: form.preferredGame,
+      // Use station.id as the GAS lookup key — no rowIndex offset needed
+      await gasUpdateStation(station.id, {
+        status:      form.status,
+        activeSlot:  form.activeSlot || '',
+        bookedSlots: form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
+        currentGame: form.currentGame,
+        // preferredGame intentionally omitted — locked
       });
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -160,18 +166,22 @@ const StationRow = ({ station, rowIndex }) => {
 
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
-      {/* 🔒 LOCKED: Station ID */}
+      {/* 🔒 ID */}
       <td className="td-id">
         <div className="id-badge">
-          <span>{typeLabel} {String(station.id || rowIndex + 1).padStart(2, '0')}</span>
+          <span>{typeLabel} {String(station.id || '').padStart(2, '0')}</span>
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
-      {/* 🔒 LOCKED: Station Name */}
+      {/* 🔒 Station Name */}
       <td className="td-i" style={{ minWidth: 130 }}>
-        <LockedCell value={station.stationName} title="Station name is locked — edit it directly in Google Sheets" />
+        <LockedCell value={station.stationName} title="Station Name is locked — edit in Google Sheets" />
       </td>
-      {/* 🔒 LOCKED: Type (shown in the ID badge as emoji, also locked) */}
+      {/* 🔒 Type */}
+      <td className="td-i">
+        <LockedCell value={station.stationType?.toUpperCase()} title="Type is locked — edit in Google Sheets" />
+      </td>
+      {/* ✏️ Status */}
       <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
           className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
@@ -179,22 +189,26 @@ const StationRow = ({ station, rowIndex }) => {
           <option value="occupied">Occupied</option>
         </select>
       </td>
+      {/* ✏️ Active Slot */}
       <td className="td-i">
         <input type="text" name="activeSlot" value={form.activeSlot} onChange={onChange}
           placeholder="14:00-15:00" className="ni" style={{ width: 110 }} />
       </td>
+      {/* ✏️ Booked Slots */}
       <td className="td-i td-w">
         <input type="text" name="bookedSlots" value={form.bookedSlots} onChange={onChange}
           placeholder="10:00-11:00, 13:00-14:00" className="ni" />
       </td>
+      {/* ✏️ Current Game */}
       <td className="td-i">
         <input type="text" name="currentGame" value={form.currentGame} onChange={onChange}
           placeholder="e.g. FC 25" className="ni" />
       </td>
+      {/* 🔒 Preferred Game */}
       <td className="td-i">
-        <input type="text" name="preferredGame" value={form.preferredGame} onChange={onChange}
-          placeholder="Preferred" className="ni" />
+        <LockedCell value={station.preferredGame} title="Preferred Game is locked — edit in Google Sheets" />
       </td>
+      {/* Save */}
       <td className="td-sv">
         {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>⚠ {err}</p>}
         <button onClick={onSave} disabled={saving}
@@ -581,18 +595,17 @@ export default function AdminDashboard() {
                       <tr className="tbl-head">
                         {[
                           '#',
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
-                            Station Name <Lock size={10} color="rgba(255,255,255,0.25)" />
-                          </span>,
-                          'Status', 'Active Slot', 'Booked Slots', 'Current Game', 'Preferred Game', ''
-                        ].map((h, i) => (
-                          <th key={i} className="tbl-th">{h}</th>
-                        ))}
+                          <span key="name" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Station Name <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
+                          <span key="type" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Type <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
+                          'Status', 'Active Slot', 'Booked Slots', 'Current Game',
+                          <span key="pref" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Preferred Game <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
+                          '',
+                        ].map((h, i) => <th key={i} className="tbl-th">{h}</th>)}
                       </tr>
                     </thead>
                     <tbody>
                       {sorted.map((s, i) => (
-                        <StationRow key={`station-${s.id || i}`} station={s} rowIndex={i} />
+                        <StationRow key={`station-${s.id || i}`} station={s} />
                       ))}
                     </tbody>
                   </table>

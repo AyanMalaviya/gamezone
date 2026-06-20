@@ -1,27 +1,22 @@
 /**
  * useSlotScheduler
  *
- * Runs every 60 seconds (in addition to useStationData’s 30s refetch).
+ * Runs every 60 seconds.
  * For each station it:
  *   1. Parses all booked slots in IST.
  *   2. Determines whether one is currently active (startMin <= nowIST < endMin).
- *   3. If a slot just became active → writes status=occupied, activeSlot=E, currentGame=preferredGame.
- *   4. If the active slot just ended → strips it from bookedSlots, clears col E,
+ *   3. If a slot just became active → writes status=occupied, activeSlot, currentGame.
+ *   4. If the active slot just ended → strips it, clears activeSlot,
  *      sets status=available if no more bookings remain today.
  *
- * Writes always go through gasClient (GAS Web App) — NO OAuth token needed.
- * oauthToken param is kept only for backwards-compatibility; it is ignored.
+ * Writes via gasClient using stationId (column A) — NOT rowIndex —
+ * so GAS always finds the correct row regardless of header-row count.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { getActiveSlot, getNextSlot, stripExpiredSlots, nowMinutes } from '../lib/slotUtils';
 import { gasUpdateStation } from '../lib/gasClient';
 
-/**
- * @param {object[]} stations      — raw stations from Google Sheets (sorted by id)
- * @param {function} refetch       — React Query refetch callback
- * @param {string|null} oauthToken — ignored; kept for API compatibility
- */
-export default function useSlotScheduler(stations, refetch, oauthToken = null) { // eslint-disable-line no-unused-vars
+export default function useSlotScheduler(stations, refetch, _oauthToken = null) { // eslint-disable-line no-unused-vars
   const stationsRef = useRef(stations);
   useEffect(() => { stationsRef.current = stations; }, [stations]);
 
@@ -30,29 +25,21 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
     const current = stationsRef.current;
     if (!current?.length) return;
 
-    const sorted = [...current].sort((a, b) => Number(a.id) - Number(b.id));
     let anyChange = false;
 
-    for (let rowIndex = 0; rowIndex < sorted.length; rowIndex++) {
-      const s = sorted[rowIndex];
-
+    for (const s of current) {
       const slots = Array.isArray(s.bookedSlots)
         ? s.bookedSlots.filter(Boolean)
         : String(s.bookedSlots ?? '').split(',').map(x => x.trim()).filter(Boolean);
 
       if (!slots.length) {
-        // No bookings — if somehow still marked occupied, free it
         if (s.status === 'occupied') {
           try {
-            await gasUpdateStation(rowIndex, {
-              id:            s.id,
-              stationName:   s.stationName   ?? '',
-              stationType:   s.stationType   ?? 'ps5',
-              status:        'available',
-              activeSlot:    '',
-              bookedSlots:   [],
-              currentGame:   '',
-              preferredGame: s.preferredGame ?? '',
+            await gasUpdateStation(s.id, {
+              status:      'available',
+              activeSlot:  '',
+              bookedSlots: [],
+              currentGame: '',
             });
             anyChange = true;
           } catch (err) {
@@ -102,16 +89,11 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
       if (slotsDiffer || statusChanged || gameChanged || activeSlotChanged) {
         anyChange = true;
         try {
-          // Always write — gasUpdateStation uses GAS Web App (no token needed)
-          await gasUpdateStation(rowIndex, {
-            id:            s.id,
-            stationName:   s.stationName   ?? '',
-            stationType:   s.stationType   ?? 'ps5',
-            status:        newStatus,
-            activeSlot:    newActiveSlot,
-            bookedSlots:   cleaned,
-            currentGame:   newCurrentGame,
-            preferredGame: s.preferredGame ?? '',
+          await gasUpdateStation(s.id, {   // ← s.id, not rowIndex
+            status:      newStatus,
+            activeSlot:  newActiveSlot,
+            bookedSlots: cleaned,
+            currentGame: newCurrentGame,
           });
         } catch (err) {
           console.warn('[SlotScheduler] write failed for station', s.id, err.message);
