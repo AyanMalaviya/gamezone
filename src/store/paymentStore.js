@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { appendBookingToSheet, updateStationOnBooking } from '../lib/sheets';
+import { gasAddBooking, gasAddBookedSlot } from '../lib/gasClient';
 import useAuthStore from './authStore';
 
 /* ─── Test UPI IDs ─── */
@@ -71,25 +71,27 @@ const usePaymentStore = create((set, get) => ({
     const { context } = get();
     if (!context) return;
 
-    // oauthToken is null for email users — writeHeaders() in sheets.js falls back to VITE_SHEETS_SERVICE_KEY
-    const oauthToken = useAuthStore.getState().oauthToken;
-    const uid        = useAuthStore.getState().user?.uid ?? context.meta?.uid ?? null;
-    const orderId    = 'ORD-' + Date.now();
+    const uid     = useAuthStore.getState().user?.uid ?? context.meta?.uid ?? null;
+    const orderId = 'ORD-' + Date.now();
 
     set({ step: 'processing', error: null });
 
     try {
       const receipt = await simulateUpiPayment({ upiId, amount: context.amount, orderId });
 
-      // 1. Save to Firestore — always works, no OAuth needed
+      // 1. Save to Firestore — source of truth, always first
       saveBookingToFirestore(uid, context, receipt);
 
-      // 2. Update station row in Sheets — marks occupied + adds booked slot
-      //    Uses oauthToken (Google users) OR VITE_SHEETS_SERVICE_KEY (email users)
-      updateStationOnBooking(context.meta ?? {}, oauthToken);
+      // 2. Add booked slot to Stations sheet (fire-and-forget via GAS Web App)
+      //    Status stays available — Apps Script promotes to occupied at start time
+      gasAddBookedSlot({
+        stationIndex: context.meta?.stationIndex,
+        stationName:  context.meta?.stationName ?? context.label ?? '',
+        slot:         context.meta?.slot        ?? '',
+      });
 
-      // 3. Append booking log row to Sheets Bookings tab
-      appendBookingToSheet({
+      // 3. Append row to Bookings sheet (fire-and-forget via GAS Web App)
+      gasAddBooking({
         txnId:       receipt.txnId,
         uid:         uid ?? '',
         stationName: context.meta?.stationName ?? context.label ?? '',
@@ -99,7 +101,7 @@ const usePaymentStore = create((set, get) => ({
         upiId:       receipt.upiId,
         bank:        receipt.bank,
         status:      'SUCCESS',
-      }, oauthToken);
+      });
 
       set(s => ({ step: 'success', receipt, history: [receipt, ...s.history] }));
     } catch (err) {

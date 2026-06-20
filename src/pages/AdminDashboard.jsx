@@ -2,18 +2,18 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star,
-  RefreshCw, CheckCircle2, AlertTriangle, Users, Settings, Plus,
+  RefreshCw, CheckCircle2, AlertTriangle, Users, Plus,
   Trash2, ChevronDown, ChevronUp, Shield, ShieldOff,
 } from 'lucide-react';
-import { signInWithPopup, signOut, GoogleAuthProvider, onAuthStateChanged } from 'firebase/auth';
+import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import useStationData from '../hooks/useStationData';
-import { updateStation } from '../lib/sheets';
-import { auth, googleProvider } from '../lib/firebase';
+import { gasUpdateStation } from '../lib/gasClient';
+import { auth, adminGoogleProvider } from '../lib/firebase';
 import { listAllUsers, updateUserProfile, setUserRole } from '../hooks/useUsers';
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-// ─── Google icon ────────────────────────────────────────────────────────────
+// ─── Google icon ───────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -61,17 +61,9 @@ const StatCard = ({ label, value, Icon, glow }) => {
   );
 };
 
-const extractOAuthToken = (result) => {
-  const cred = GoogleAuthProvider.credentialFromResult(result);
-  if (cred?.accessToken) return cred.accessToken;
-  // eslint-disable-next-line no-underscore-dangle
-  return result?._tokenResponse?.oauthAccessToken ?? null;
-};
+const SESSION_USER_KEY = 'gz_admin_user';
 
-const SESSION_TOKEN_KEY = 'gz_admin_oauth';
-const SESSION_USER_KEY  = 'gz_admin_user';
-
-// ─── LoginPage ───────────────────────────────────────────────────────────────
+// ─── LoginPage ─────────────────────────────────────────────────────────────────
 const LoginPage = ({ onLogin, busy, error }) => (
   <div className="adm-login-wrap">
     <NeonBg />
@@ -102,8 +94,8 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── StationRow ──────────────────────────────────────────────────────────────
-const StationRow = ({ station, rowIndex, oauthToken }) => {
+// ─── StationRow ─────────────────────────────────────────────────────────────────
+const StationRow = ({ station, rowIndex }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
     if (typeof slot === 'string') return slot;
@@ -123,12 +115,16 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(null);
+
   useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
+
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
   const onSave = async () => {
     setSaving(true); setErr(null);
     try {
-      await updateStation(rowIndex, {
+      // gasUpdateStation sends to GAS Web App — no OAuth token needed
+      await gasUpdateStation(rowIndex, {
         id:            station.id          ?? '',
         stationName:   station.stationName ?? '',
         stationType:   station.stationType ?? 'ps5',
@@ -137,14 +133,16 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
         bookedSlots:   form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
         currentGame:   form.currentGame,
         preferredGame: form.preferredGame,
-      }, oauthToken);
+      });
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } catch (e) {
       setErr(e.message || 'Save failed'); setTimeout(() => setErr(null), 6000);
     } finally { setSaving(false); }
   };
+
   const occupied  = form.status?.toLowerCase() === 'occupied';
   const typeLabel = station.stationType === 'racing' ? '🏎️' : '🎮';
+
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
       <td className="td-id">
@@ -182,7 +180,7 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
           placeholder="Preferred" className="ni" />
       </td>
       <td className="td-sv">
-        {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>&#9888; {err}</p>}
+        {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>⚠ {err}</p>}
         <button onClick={onSave} disabled={saving}
           className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
           {saving ? <Loader2 size={13} className="adm-spin" />
@@ -196,49 +194,37 @@ const StationRow = ({ station, rowIndex, oauthToken }) => {
   );
 };
 
-// ─── input style helper ───────────────────────────────────────────────────────
+// ─── input style helper ─────────────────────────────────────────────────────────────────
 const inputStyle = {
   width: '100%', padding: '8px 10px', borderRadius: 7,
   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
   color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
 };
 
-// ─── UserRow ─────────────────────────────────────────────────────────────────
-/**
- * Each UserRow holds its own local custom-field state.
- * Admin can:
- *   - Edit core fields (name, email, phone)
- *   - Add new ad-hoc key/value pairs specific to this user
- *   - Delete any custom field from this user
- *   - Toggle admin role
- * All saved directly to Firestore user doc.
- */
+// ─── UserRow ─────────────────────────────────────────────────────────────────────
 const UserRow = ({ user, onUpdate, onRoleChange }) => {
   const [expanded, setExpanded] = useState(false);
   const isAdmin = user.role === 'admin';
 
-  // Core editable fields
   const [core, setCore] = useState({
     name:  user.name  || '',
     email: user.email || '',
     phone: user.phone || '',
   });
 
-  // Extra fields: everything in the user doc that isn't a system key
-  const SYSTEM_KEYS = new Set(['uid', 'name', 'email', 'phone', 'role', 'createdAt', 'hasPhone']);
+  const SYSTEM_KEYS  = new Set(['uid','name','email','phone','role','createdAt','hasPhone']);
   const extraInitial = Object.entries(user)
     .filter(([k]) => !SYSTEM_KEYS.has(k))
     .map(([k, v]) => ({ key: k, value: String(v ?? '') }));
 
-  const [extras, setExtras]     = useState(extraInitial);
-  const [saving, setSaving]     = useState(false);
-  const [saved, setSaved]       = useState(false);
-  const [roleChanging, setRC]   = useState(false);
-  const [newKey, setNewKey]     = useState('');
-  const [newVal, setNewVal]     = useState('');
-  const [addingField, setAdding]= useState(false);
+  const [extras, setExtras]      = useState(extraInitial);
+  const [saving, setSaving]      = useState(false);
+  const [saved,  setSaved]       = useState(false);
+  const [roleChanging, setRC]    = useState(false);
+  const [newKey, setNewKey]      = useState('');
+  const [newVal, setNewVal]      = useState('');
+  const [addingField, setAdding] = useState(false);
 
-  // Keep state in sync if parent refreshes user list
   useEffect(() => {
     setCore({ name: user.name || '', email: user.email || '', phone: user.phone || '' });
     const fresh = Object.entries(user)
@@ -263,17 +249,13 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
     finally { setRC(false); }
   };
 
-  const addExtra = () => {
+  const addExtra    = () => {
     const k = newKey.trim();
     if (!k) return;
     setExtras(e => [...e, { key: k, value: newVal }]);
-    setNewKey('');
-    setNewVal('');
-    setAdding(false);
+    setNewKey(''); setNewVal(''); setAdding(false);
   };
-
   const removeExtra = (idx) => setExtras(e => e.filter((_, i) => i !== idx));
-
   const updateExtra = (idx, field, val) =>
     setExtras(e => e.map((item, i) => i === idx ? { ...item, [field]: val } : item));
 
@@ -284,7 +266,6 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
       border: `1px solid ${isAdmin ? 'rgba(168,85,247,0.3)' : 'rgba(255,255,255,0.07)'}`,
       overflow: 'hidden',
     }}>
-      {/* Collapsed summary row */}
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer' }}
         onClick={() => setExpanded(e => !e)}
@@ -317,143 +298,97 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
         {user.phone && (
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>{user.phone}</span>
         )}
-        {expanded
-          ? <ChevronUp size={14} color="rgba(255,255,255,0.3)" />
-          : <ChevronDown size={14} color="rgba(255,255,255,0.3)" />}
+        {expanded ? <ChevronUp size={14} color="rgba(255,255,255,0.3)" /> : <ChevronDown size={14} color="rgba(255,255,255,0.3)" />}
       </div>
 
-      {/* Expanded panel */}
       {expanded && (
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-
-          {/* Core fields */}
           <p style={{ fontSize: '0.6rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', margin: '14px 0 8px' }}>Core Info</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
             {[['name','Name'],['email','Email'],['phone','Phone']].map(([key, label]) => (
               <div key={key}>
                 <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>{label.toUpperCase()}</label>
-                <input
-                  type="text"
-                  value={core[key]}
+                <input type="text" value={core[key]}
                   onChange={e => setCore(p => ({ ...p, [key]: e.target.value }))}
-                  style={inputStyle}
-                />
+                  style={inputStyle} />
               </div>
             ))}
           </div>
 
-          {/* Extra / custom fields */}
           {(extras.length > 0 || addingField) && (
             <>
               <p style={{ fontSize: '0.6rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', margin: '14px 0 8px' }}>Extra Info</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {extras.map((item, idx) => (
                   <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'center' }}>
-                    <input
-                      placeholder="Field name"
-                      value={item.key}
+                    <input placeholder="Field name" value={item.key}
                       onChange={e => updateExtra(idx, 'key', e.target.value)}
-                      style={{ ...inputStyle, fontWeight: 600 }}
-                    />
-                    <input
-                      placeholder="Value"
-                      value={item.value}
+                      style={{ ...inputStyle, fontWeight: 600 }} />
+                    <input placeholder="Value" value={item.value}
                       onChange={e => updateExtra(idx, 'value', e.target.value)}
-                      style={inputStyle}
-                    />
-                    <button
-                      onClick={() => removeExtra(idx)}
-                      style={{
-                        width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-                        background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
-                        color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    ><Trash2 size={13} /></button>
+                      style={inputStyle} />
+                    <button onClick={() => removeExtra(idx)} style={{
+                      width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                      color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    }}><Trash2 size={13} /></button>
                   </div>
                 ))}
-
                 {addingField && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 8, alignItems: 'center' }}>
-                    <input
-                      autoFocus
-                      placeholder="e.g. address"
-                      value={newKey}
+                    <input autoFocus placeholder="e.g. address" value={newKey}
                       onChange={e => setNewKey(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && addExtra()}
-                      style={{ ...inputStyle, borderColor: 'rgba(124,58,237,0.4)' }}
-                    />
-                    <input
-                      placeholder="Value"
-                      value={newVal}
+                      style={{ ...inputStyle, borderColor: 'rgba(124,58,237,0.4)' }} />
+                    <input placeholder="Value" value={newVal}
                       onChange={e => setNewVal(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && addExtra()}
-                      style={inputStyle}
-                    />
-                    <button
-                      onClick={addExtra}
-                      style={{
-                        padding: '7px 10px', borderRadius: 7,
-                        background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.4)',
-                        color: '#a78bfa', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}
-                    >Add</button>
-                    <button
-                      onClick={() => { setAdding(false); setNewKey(''); setNewVal(''); }}
-                      style={{
-                        width: 30, height: 30, borderRadius: 7, flexShrink: 0,
-                        background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer',
-                      }}
-                    ><AlertTriangle size={12} /></button>
+                      style={inputStyle} />
+                    <button onClick={addExtra} style={{
+                      padding: '7px 10px', borderRadius: 7,
+                      background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.4)',
+                      color: '#a78bfa', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}>Add</button>
+                    <button onClick={() => { setAdding(false); setNewKey(''); setNewVal(''); }} style={{
+                      width: 30, height: 30, borderRadius: 7, flexShrink: 0,
+                      background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                      color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    }}><AlertTriangle size={12} /></button>
                   </div>
                 )}
               </div>
             </>
           )}
 
-          {/* Actions row */}
           <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-            <button
-              onClick={() => setAdding(true)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '7px 12px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.45)', fontSize: '0.76rem', cursor: 'pointer',
-              }}
-            ><Plus size={12} /> Add Field</button>
+            <button onClick={() => setAdding(true)} style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              padding: '7px 12px', borderRadius: 8,
+              background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.45)', fontSize: '0.76rem', cursor: 'pointer',
+            }}><Plus size={12} /> Add Field</button>
 
-            <button
-              onClick={handleSave} disabled={saving}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', borderRadius: 8,
-                background: saved ? 'rgba(34,197,94,0.2)' : 'rgba(124,58,237,0.2)',
-                border: `1px solid ${saved ? 'rgba(34,197,94,0.4)' : 'rgba(124,58,237,0.4)'}`,
-                color: saved ? '#4ade80' : '#a78bfa',
-                fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-              }}
-            >
+            <button onClick={handleSave} disabled={saving} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 8,
+              background: saved ? 'rgba(34,197,94,0.2)' : 'rgba(124,58,237,0.2)',
+              border: `1px solid ${saved ? 'rgba(34,197,94,0.4)' : 'rgba(124,58,237,0.4)'}`,
+              color: saved ? '#4ade80' : '#a78bfa',
+              fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+            }}>
               {saving ? <Loader2 size={12} className="adm-spin" /> : saved ? <CheckCircle2 size={12} /> : <Save size={12} />}
               {saving ? 'Saving…' : saved ? 'Saved!' : 'Save Changes'}
             </button>
 
-            <button
-              onClick={handleRoleToggle} disabled={roleChanging}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '8px 14px', borderRadius: 8,
-                background: isAdmin ? 'rgba(239,68,68,0.1)' : 'rgba(168,85,247,0.1)',
-                border: `1px solid ${isAdmin ? 'rgba(239,68,68,0.3)' : 'rgba(168,85,247,0.3)'}`,
-                color: isAdmin ? '#f87171' : '#c084fc',
-                fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-              }}
-            >
-              {roleChanging
-                ? <Loader2 size={12} className="adm-spin" />
-                : isAdmin ? <ShieldOff size={12} /> : <Shield size={12} />}
+            <button onClick={handleRoleToggle} disabled={roleChanging} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 8,
+              background: isAdmin ? 'rgba(239,68,68,0.1)' : 'rgba(168,85,247,0.1)',
+              border: `1px solid ${isAdmin ? 'rgba(239,68,68,0.3)' : 'rgba(168,85,247,0.3)'}`,
+              color: isAdmin ? '#f87171' : '#c084fc',
+              fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+            }}>
+              {roleChanging ? <Loader2 size={12} className="adm-spin" /> : isAdmin ? <ShieldOff size={12} /> : <Shield size={12} />}
               {isAdmin ? 'Remove Admin' : 'Make Admin'}
             </button>
           </div>
@@ -463,10 +398,9 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
   );
 };
 
-// ─── AdminDashboard ───────────────────────────────────────────────────────────
+// ─── AdminDashboard ─────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [adminUser,  setAdminUser]  = useState(null);
-  const [adminToken, setAdminToken] = useState(null);
   const [loginBusy,  setLoginBusy]  = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [sessionRestoring, setRestoring] = useState(true);
@@ -479,25 +413,22 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const zapRef   = useRef(null);
 
-  // Restore session from sessionStorage
+  // Restore session from sessionStorage (user object only, no token needed)
   useEffect(() => {
-    const token    = sessionStorage.getItem(SESSION_TOKEN_KEY);
     const userJson = sessionStorage.getItem(SESSION_USER_KEY);
-    if (token && userJson) {
-      try { setAdminUser(JSON.parse(userJson)); setAdminToken(token); } catch {}
+    if (userJson) {
+      try { setAdminUser(JSON.parse(userJson)); } catch {}
     }
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       if (!firebaseUser) {
-        sessionStorage.removeItem(SESSION_TOKEN_KEY);
         sessionStorage.removeItem(SESSION_USER_KEY);
-        setAdminUser(null); setAdminToken(null);
+        setAdminUser(null);
       }
       setRestoring(false);
     });
     return unsub;
   }, []);
 
-  // Zap hue animation
   useEffect(() => {
     if (!zapRef.current || !adminUser) return;
     let h = 0;
@@ -508,7 +439,6 @@ export default function AdminDashboard() {
     return () => clearInterval(id);
   }, [adminUser]);
 
-  // Load users when Users tab is opened
   useEffect(() => {
     if (activeTab !== 'users' || !adminUser) return;
     setUsersLoad(true);
@@ -520,28 +450,23 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
     sessionStorage.removeItem(SESSION_USER_KEY);
-    setAdminUser(null); setAdminToken(null);
+    setAdminUser(null);
     navigate('/', { replace: true });
   };
 
   const handleLogin = async () => {
     setLoginBusy(true); setLoginError(null);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const token  = extractOAuthToken(result);
-      if (!token) {
-        setLoginError('Google did not return an OAuth token. Ensure the Sheets API is enabled and the spreadsheets scope is on the OAuth consent screen.');
-        await signOut(auth); return;
-      }
+      // adminGoogleProvider includes Sheets scope for session token (legacy)
+      // All Sheets writes now go through gasClient — no token stored in sessionStorage
+      const result  = await signInWithPopup(auth, adminGoogleProvider);
       const userObj = {
         uid: result.user.uid, email: result.user.email,
         displayName: result.user.displayName, photoURL: result.user.photoURL,
       };
-      sessionStorage.setItem(SESSION_TOKEN_KEY, token);
-      sessionStorage.setItem(SESSION_USER_KEY,  JSON.stringify(userObj));
-      setAdminUser(userObj); setAdminToken(token);
+      sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(userObj));
+      setAdminUser(userObj);
     } catch (e) {
       setLoginError(e.message || 'Sign-in failed. Try again.');
     } finally { setLoginBusy(false); }
@@ -558,7 +483,7 @@ export default function AdminDashboard() {
   }, []);
 
   if (sessionRestoring) return null;
-  if (!adminUser || !adminToken) {
+  if (!adminUser) {
     return <LoginPage onLogin={handleLogin} busy={loginBusy} error={loginError} />;
   }
 
@@ -583,8 +508,6 @@ export default function AdminDashboard() {
       <NeonBg />
       <Navbar />
       <main className="adm-body" style={{ paddingTop: 72 }}>
-
-        {/* Header */}
         <div className="adm-hdr">
           <div className="adm-hdr-l">
             <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
@@ -609,7 +532,6 @@ export default function AdminDashboard() {
           <div className="adm-div-line" />
         </div>
 
-        {/* Stats */}
         <div className="sc-grid">
           <StatCard label="Total Stations" value={total}     Icon={Gamepad2}     glow="#a855f7" />
           <StatCard label="Available"      value={available} Icon={CheckCircle2} glow="#22c55e" />
@@ -617,7 +539,6 @@ export default function AdminDashboard() {
           <StatCard label="Utilisation"    value={util}      Icon={Star}         glow="#ec4899" />
         </div>
 
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           <button style={TAB(activeTab === 'stations')} onClick={() => setActiveTab('stations')}>
             <Gamepad2 size={14} /> Stations
@@ -627,7 +548,6 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Stations tab */}
         {activeTab === 'stations' && (
           <>
             {isLoading && (
@@ -649,14 +569,14 @@ export default function AdminDashboard() {
                   <table className="tbl">
                     <thead>
                       <tr className="tbl-head">
-                        {['#', 'Station Name', 'Status', 'Active Slot', 'Booked Slots', 'Current Game', 'Preferred Game', ''].map((h, i) => (
+                        {['#','Station Name','Status','Active Slot','Booked Slots','Current Game','Preferred Game',''].map((h, i) => (
                           <th key={i} className="tbl-th">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {sorted.map((s, i) => (
-                        <StationRow key={`station-${s.id || i}`} station={s} rowIndex={i} oauthToken={adminToken} />
+                        <StationRow key={`station-${s.id || i}`} station={s} rowIndex={i} />
                       ))}
                     </tbody>
                   </table>
@@ -667,7 +587,6 @@ export default function AdminDashboard() {
           </>
         )}
 
-        {/* Users tab */}
         {activeTab === 'users' && (
           <div>
             {usersLoad ? (
@@ -682,18 +601,12 @@ export default function AdminDashboard() {
                   {users.length} registered user{users.length !== 1 ? 's' : ''} · Click a row to expand and edit
                 </p>
                 {users.map(u => (
-                  <UserRow
-                    key={u.uid}
-                    user={u}
-                    onUpdate={handleUserUpdate}
-                    onRoleChange={handleRoleChange}
-                  />
+                  <UserRow key={u.uid} user={u} onUpdate={handleUserUpdate} onRoleChange={handleRoleChange} />
                 ))}
               </div>
             )}
           </div>
         )}
-
       </main>
     </div>
   );
