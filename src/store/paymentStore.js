@@ -83,11 +83,12 @@ const usePaymentStore = create((set, get) => ({
       saveBookingToFirestore(uid, context, receipt);
 
       // 2. Add booked slot to Stations sheet (fire-and-forget via GAS Web App)
+      //    Uses stationId (col A lookup) — NOT stationIndex offset
       //    Status stays available — Apps Script promotes to occupied at start time
       gasAddBookedSlot({
-        stationIndex: context.meta?.stationIndex,
-        stationName:  context.meta?.stationName ?? context.label ?? '',
-        slot:         context.meta?.slot        ?? '',
+        stationId:   context.meta?.stationId   ?? '',   // ✔ col A lookup in GAS
+        stationName: context.meta?.stationName ?? context.label ?? '',
+        slot:        context.meta?.slot        ?? '',
       });
 
       // 3. Append row to Bookings sheet (fire-and-forget via GAS Web App)
