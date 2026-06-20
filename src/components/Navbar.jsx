@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UserCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { ADMIN_PATH } from '../App';
+import logoSrc from '../assets/images/logo.png';
 
 const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
@@ -44,10 +45,10 @@ export default function Navbar() {
         <div className="navbar-scan" />
         <div className="navbar-inner">
 
-          {/* Logo — use favicon.ico which is guaranteed to exist */}
+          {/* Logo — imported via Vite so it works on Vercel */}
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <img
-              src="/favicon.ico"
+              src={logoSrc}
               alt="GameZone logo"
               width="32" height="32"
               style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
