@@ -22,15 +22,13 @@ async function gasPost(payload) {
     return;
   }
   try {
-    // no-cors: browser won't read response, but POST is sent and GAS processes it
     await fetch(GAS_URL, {
       method:  'POST',
       mode:    'no-cors',
-      headers: { 'Content-Type': 'text/plain' }, // no-cors forbids application/json header
+      headers: { 'Content-Type': 'text/plain' },
       body:    JSON.stringify(payload),
     });
   } catch (err) {
-    // Network error (offline etc.) — log but never block the UI
     console.warn('[gasClient] fetch error:', err.message);
   }
 }
@@ -52,26 +50,38 @@ export function gasAddBookedSlot({ stationIndex, stationName, slot }) {
 
 /**
  * Append a new user row to the Users sheet.
+ * Also exported as appendUserToSheet for backwards compatibility with useUserProfile.js.
  */
 export function gasAddUser({ uid, name, email, phone, role }) {
   return gasPost({ action: 'addUser', uid, name, email, phone, role });
 }
 
+/** Alias used by useUserProfile.js */
+export const appendUserToSheet = ({ uid, name, email, phone, role }, _oauthToken) =>
+  gasAddUser({ uid, name, email, phone, role });
+
+/**
+ * Update the phone number for an existing user row in the Users sheet.
+ * Alias used by useUserProfile.js.
+ */
+export function updateUserPhoneInSheet(uid, phone, _oauthToken) {
+  return gasPost({ action: 'updateUserPhone', uid, phone });
+}
+
 /**
  * Admin explicit station save (from AdminDashboard Save button).
- * Replaces the need for oauthToken in updateStation.
  */
 export function gasUpdateStation(rowIndex, data) {
   return gasPost({
-    action:       'updateStation',
+    action:        'updateStation',
     rowIndex,
-    id:           data.id,
-    stationName:  data.stationName,
-    stationType:  data.stationType,
-    status:       data.status,
-    activeSlot:   data.activeSlot,
-    bookedSlots:  data.bookedSlots,
-    currentGame:  data.currentGame,
-    preferredGame:data.preferredGame,
+    id:            data.id,
+    stationName:   data.stationName,
+    stationType:   data.stationType,
+    status:        data.status,
+    activeSlot:    data.activeSlot,
+    bookedSlots:   data.bookedSlots,
+    currentGame:   data.currentGame,
+    preferredGame: data.preferredGame,
   });
 }

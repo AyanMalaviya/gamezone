@@ -1,6 +1,6 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { appendUserToSheet, updateUserPhoneInSheet } from '../lib/sheets';
+import { appendUserToSheet, updateUserPhoneInSheet } from '../lib/gasClient';
 import useAuthStore from '../store/authStore';
 
 export async function getUserProfile(uid) {
