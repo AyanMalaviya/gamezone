@@ -13,7 +13,7 @@ import { createUserProfile, getUserProfile, savePhoneNumber } from './useUserPro
 import { gasAddUser } from '../lib/gasClient';
 import useAuthStore from '../store/authStore';
 
-// ─── Email login ──────────────────────────────────────────────────────────────────────
+// ─── Email login ──────────────────────────────────────────────────────────────
 export async function loginWithEmail(email, password) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
   if (!cred.user.emailVerified) {
@@ -25,7 +25,7 @@ export async function loginWithEmail(email, password) {
   return cred;
 }
 
-// ─── Email register ───────────────────────────────────────────────────────────────────
+// ─── Email register (always member) ──────────────────────────────────────────
 export async function registerWithEmail(email, password, phoneOrName) {
   const cred    = await createUserWithEmailAndPassword(auth, email, password);
   const isPhone = /^[+\d]/.test(phoneOrName);
@@ -35,9 +35,9 @@ export async function registerWithEmail(email, password, phoneOrName) {
     phone: isPhone ? phoneOrName : '',
   };
 
-  await createUserProfile(cred.user.uid, profile);
+  // role = 'member' (default)
+  await createUserProfile(cred.user.uid, profile, 'member');
 
-  // Sync new user to Sheets via GAS (fire-and-forget, no token needed)
   gasAddUser({
     uid:   cred.user.uid,
     email: profile.email,
@@ -51,7 +51,7 @@ export async function registerWithEmail(email, password, phoneOrName) {
   return cred;
 }
 
-// ─── Google login (members) ───────────────────────────────────────────────────────────────────
+// ─── Google login (members) ───────────────────────────────────────────────────
 export async function loginWithGoogle() {
   const result   = await signInWithPopup(auth, googleProvider);
   const existing = await getUserProfile(result.user.uid);
@@ -62,9 +62,9 @@ export async function loginWithGoogle() {
       name:  result.user.displayName || '',
       phone: '',
     };
-    await createUserProfile(result.user.uid, profile);
+    // role = 'member' (default)
+    await createUserProfile(result.user.uid, profile, 'member');
 
-    // Sync new Google user to Sheets (fire-and-forget)
     gasAddUser({
       uid:   result.user.uid,
       email: profile.email,
@@ -76,7 +76,7 @@ export async function loginWithGoogle() {
   return result;
 }
 
-// ─── Google login (admin) ──────────────────────────────────────────────────────────────────────
+// ─── Google login (admin panel) ───────────────────────────────────────────────
 export async function loginWithGoogleAdmin() {
   const result = await signInWithPopup(auth, adminGoogleProvider);
 
@@ -85,16 +85,16 @@ export async function loginWithGoogleAdmin() {
   if (accessToken) useAuthStore.getState().setOauthToken(accessToken);
 
   const existing = await getUserProfile(result.user.uid);
+
   if (!existing) {
+    // Brand-new user logging in via admin panel → create as admin
     const profile = {
       email: result.user.email,
       name:  result.user.displayName || '',
       phone: '',
     };
-    // ✔ create Firestore doc so admin appears in Users tab immediately
-    await createUserProfile(result.user.uid, profile);
+    await createUserProfile(result.user.uid, profile, 'admin');
 
-    // ✔ also sync admin to Sheets Users sheet
     gasAddUser({
       uid:   result.user.uid,
       email: profile.email,
@@ -103,7 +103,7 @@ export async function loginWithGoogleAdmin() {
       role:  'admin',
     });
   } else if (existing.role !== 'admin') {
-    // Promote to admin in Firestore if not already
+    // Existing member using admin panel → promote to admin
     const { updateUserProfile } = await import('./useUsers');
     await updateUserProfile(result.user.uid, { role: 'admin' });
   }
@@ -111,12 +111,12 @@ export async function loginWithGoogleAdmin() {
   return result;
 }
 
-// ─── Phone helper ───────────────────────────────────────────────────────────────────────
+// ─── Phone helper ─────────────────────────────────────────────────────────────
 export async function savePhone(uid, phone) {
   return savePhoneNumber(uid, phone);
 }
 
-// ─── App-level auth listener (App.jsx) ─────────────────────────────────────────────────────────
+// ─── App-level auth listener ──────────────────────────────────────────────────
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
   const setRole    = useAuthStore(s => s.setRole);
@@ -147,7 +147,7 @@ export function useAuthListener() {
   }, [setUser, setRole, setPhone, setLoading]);
 }
 
-// ─── Component-local hook ──────────────────────────────────────────────────────────────────────
+// ─── Component-local hook ─────────────────────────────────────────────────────
 export function useAuth() {
   const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
