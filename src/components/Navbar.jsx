@@ -3,13 +3,75 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UserCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { ADMIN_PATH } from '../App';
-import logoSrc from '../assets/images/logo.png';
 
 const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
   { label: 'Stations', href: '/stations' },
   { label: 'Pricing',  href: '/pricing' },
 ];
+
+/** GameZone inline SVG logo — no external file, works everywhere */
+const GameZoneLogo = ({ size = 36 }) => (
+  <svg
+    width={size} height={size} viewBox="0 0 48 48"
+    fill="none" xmlns="http://www.w3.org/2000/svg"
+    aria-hidden="true" style={{ flexShrink: 0, display: 'block' }}
+  >
+    <defs>
+      <radialGradient id="gz-bg" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#1e1040" />
+        <stop offset="100%" stopColor="#0a0010" />
+      </radialGradient>
+      <linearGradient id="gz-ring" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#a855f7" />
+        <stop offset="50%" stopColor="#7c3aed" />
+        <stop offset="100%" stopColor="#c084fc" />
+      </linearGradient>
+      <linearGradient id="gz-btn" x1="14" y1="24" x2="34" y2="24" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stopColor="#a855f7" />
+        <stop offset="100%" stopColor="#7c3aed" />
+      </linearGradient>
+      <filter id="gz-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+        <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </defs>
+
+    {/* Background circle */}
+    <circle cx="24" cy="24" r="23" fill="url(#gz-bg)" />
+
+    {/* Outer ring */}
+    <circle cx="24" cy="24" r="22" stroke="url(#gz-ring)" strokeWidth="1.5" fill="none" />
+
+    {/* Controller body */}
+    <rect x="10" y="18" width="28" height="16" rx="7" fill="url(#gz-btn)" filter="url(#gz-glow)" />
+
+    {/* D-pad left side — cross */}
+    <rect x="14" y="23" width="6" height="2" rx="1" fill="#fff" opacity="0.9" />
+    <rect x="16" y="21" width="2" height="6" rx="1" fill="#fff" opacity="0.9" />
+
+    {/* Action buttons right side — circles */}
+    <circle cx="33" cy="23" r="1.4" fill="#f9a8d4" opacity="0.95" />
+    <circle cx="36" cy="26" r="1.4" fill="#86efac" opacity="0.95" />
+    <circle cx="30" cy="26" r="1.4" fill="#fde68a" opacity="0.95" />
+    <circle cx="33" cy="29" r="1.4" fill="#93c5fd" opacity="0.95" />
+
+    {/* Center home button */}
+    <circle cx="24" cy="26" r="2.2" fill="#fff" opacity="0.15" />
+    <circle cx="24" cy="26" r="1.2" fill="#c4b5fd" opacity="0.9" />
+
+    {/* Cable bumps top */}
+    <path d="M19 18 Q20 14 24 14 Q28 14 29 18" stroke="#a855f7" strokeWidth="1.2" fill="none" opacity="0.6" />
+
+    {/* Grip accent lines bottom */}
+    <path d="M15 31 Q17 34 20 33" stroke="#c084fc" strokeWidth="0.8" fill="none" opacity="0.5" />
+    <path d="M33 31 Q31 34 28 33" stroke="#c084fc" strokeWidth="0.8" fill="none" opacity="0.5" />
+
+    {/* Glow dot top-right */}
+    <circle cx="37" cy="13" r="2" fill="#a855f7" opacity="0.5" />
+    <circle cx="37" cy="13" r="1" fill="#e879f9" opacity="0.9" />
+  </svg>
+);
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -45,14 +107,9 @@ export default function Navbar() {
         <div className="navbar-scan" />
         <div className="navbar-inner">
 
-          {/* Logo — imported via Vite so it works on Vercel */}
+          {/* Logo — inline SVG, zero network request, works on Vercel */}
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
-            <img
-              src={logoSrc}
-              alt="GameZone logo"
-              width="32" height="32"
-              style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
-            />
+            <GameZoneLogo size={36} />
             <span className="navbar-logo-text">
               GAME<span className="navbar-logo-accent">ZONE</span>
             </span>
@@ -66,7 +123,6 @@ export default function Navbar() {
                 {link.label}<span className="navbar-link-bar" />
               </Link>
             ))}
-            {/* Dashboard — visible only to admins */}
             {isAdmin && (
               <a href="#" onClick={handleDashboardClick}
                 className={`navbar-link navbar-link-admin${isActive(`/${ADMIN_PATH}`) ? ' navbar-link-active' : ''}`}
@@ -95,7 +151,6 @@ export default function Navbar() {
                 >
                   <UserCircle2 size={15} />
                   <span>{user.displayName?.split(' ')[0] || user.email?.split('@')[0]}</span>
-                  {/* Red dot if phone missing */}
                   {!phone && (
                     <span title="Add phone number to book" style={{
                       width: 7, height: 7, borderRadius: '50%',
@@ -104,7 +159,6 @@ export default function Navbar() {
                       flexShrink: 0,
                     }} />
                   )}
-                  {/* Admin badge */}
                   {isAdmin && (
                     <span style={{
                       fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em',

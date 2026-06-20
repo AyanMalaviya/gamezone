@@ -13,7 +13,7 @@ import { createUserProfile, getUserProfile, savePhoneNumber } from './useUserPro
 import { gasAddUser } from '../lib/gasClient';
 import useAuthStore from '../store/authStore';
 
-// ─── Email login ──────────────────────────────────────────────────────────────
+// ─── Email login ──────────────────────────────────────────────────────────────────────
 export async function loginWithEmail(email, password) {
   const cred = await signInWithEmailAndPassword(auth, email, password);
   if (!cred.user.emailVerified) {
@@ -25,7 +25,7 @@ export async function loginWithEmail(email, password) {
   return cred;
 }
 
-// ─── Email register ──────────────────────────────────────────────────────────
+// ─── Email register ───────────────────────────────────────────────────────────────────
 export async function registerWithEmail(email, password, phoneOrName) {
   const cred    = await createUserWithEmailAndPassword(auth, email, password);
   const isPhone = /^[+\d]/.test(phoneOrName);
@@ -51,7 +51,7 @@ export async function registerWithEmail(email, password, phoneOrName) {
   return cred;
 }
 
-// ─── Google login (members) ─────────────────────────────────────────────────────
+// ─── Google login (members) ───────────────────────────────────────────────────────────────────
 export async function loginWithGoogle() {
   const result   = await signInWithPopup(auth, googleProvider);
   const existing = await getUserProfile(result.user.uid);
@@ -76,32 +76,47 @@ export async function loginWithGoogle() {
   return result;
 }
 
-// ─── Google login (admin only) ──────────────────────────────────────────────────
+// ─── Google login (admin) ──────────────────────────────────────────────────────────────────────
 export async function loginWithGoogleAdmin() {
   const result = await signInWithPopup(auth, adminGoogleProvider);
 
-  // Store OAuth token in Zustand — still used by AdminDashboard session restore
   const credential  = GoogleAuthProvider.credentialFromResult(result);
   const accessToken = credential?.accessToken ?? null;
   if (accessToken) useAuthStore.getState().setOauthToken(accessToken);
 
   const existing = await getUserProfile(result.user.uid);
   if (!existing) {
-    await createUserProfile(result.user.uid, {
+    const profile = {
       email: result.user.email,
       name:  result.user.displayName || '',
       phone: '',
+    };
+    // ✔ create Firestore doc so admin appears in Users tab immediately
+    await createUserProfile(result.user.uid, profile);
+
+    // ✔ also sync admin to Sheets Users sheet
+    gasAddUser({
+      uid:   result.user.uid,
+      email: profile.email,
+      name:  profile.name,
+      phone: '',
+      role:  'admin',
     });
+  } else if (existing.role !== 'admin') {
+    // Promote to admin in Firestore if not already
+    const { updateUserProfile } = await import('./useUsers');
+    await updateUserProfile(result.user.uid, { role: 'admin' });
   }
+
   return result;
 }
 
-// ─── Phone helper ─────────────────────────────────────────────────────────────
+// ─── Phone helper ───────────────────────────────────────────────────────────────────────
 export async function savePhone(uid, phone) {
   return savePhoneNumber(uid, phone);
 }
 
-// ─── App-level auth listener (App.jsx) ──────────────────────────────────────────
+// ─── App-level auth listener (App.jsx) ─────────────────────────────────────────────────────────
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
   const setRole    = useAuthStore(s => s.setRole);
@@ -132,7 +147,7 @@ export function useAuthListener() {
   }, [setUser, setRole, setPhone, setLoading]);
 }
 
-// ─── Component-local hook ─────────────────────────────────────────────────────
+// ─── Component-local hook ──────────────────────────────────────────────────────────────────────
 export function useAuth() {
   const [user, setUser]       = useState(null);
   const [profile, setProfile] = useState(null);
