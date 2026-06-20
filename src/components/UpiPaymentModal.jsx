@@ -84,9 +84,11 @@ export default function UpiPaymentModal() {
   const label     = context?.label  ?? 'GameZone Payment';
   const slotLabel = fmtSlotLabel(context?.meta?.slot);
 
-  const borderColor = step === 'success' ? 'rgba(34,197,94,0.35)' : step === 'failed' ? 'rgba(239,68,68,0.35)' : 'rgba(124,58,237,0.3)';
+  const borderColor = step === 'success' ? 'rgba(34,197,94,0.35)'  : step === 'failed' ? 'rgba(239,68,68,0.35)'  : 'rgba(124,58,237,0.3)';
   const glowColor   = step === 'success' ? 'rgba(34,197,94,0.15)'  : step === 'failed' ? 'rgba(239,68,68,0.15)'  : 'rgba(124,58,237,0.12)';
-  const edgeGrad    = step === 'success'
+
+  // Split into backgroundImage + backgroundSize to avoid React shorthand conflict warning
+  const edgeImage = step === 'success'
     ? 'linear-gradient(90deg,transparent,#22c55e,#4ade80,#22c55e,transparent)'
     : step === 'failed'
     ? 'linear-gradient(90deg,transparent,#ef4444,#f87171,#ef4444,transparent)'
@@ -116,8 +118,11 @@ export default function UpiPaymentModal() {
             outline: 'none', overflow: 'hidden',
           }}
         >
+          {/* Edge shimmer bar — use backgroundImage + backgroundSize separately to avoid React shorthand warning */}
           <div style={{
-            height: 3, background: edgeGrad, backgroundSize: '200% 100%',
+            height: 3,
+            backgroundImage: edgeImage,
+            backgroundSize: '200% 100%',
             animation: step === 'processing' ? 'upi-edge 1.2s linear infinite' : 'upi-edge 2.8s linear infinite',
           }} />
 
