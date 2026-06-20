@@ -9,23 +9,19 @@
  *   4. If the active slot just ended → strips it from bookedSlots, clears col E,
  *      sets status=available if no more bookings remain today.
  *
- * Writes to Google Sheets ONLY when something actually changed, via gasClient (GAS Web App).
- * oauthToken is kept in the signature for backwards compatibility but is no longer
- * required — gasUpdateStation uses the GAS service account internally.
- *
- * rowIndex passed to gasUpdateStation() is the station’s 0-based index in the
- * sorted (by id) stations array — matching how the sheet is ordered.
+ * Writes always go through gasClient (GAS Web App) — NO OAuth token needed.
+ * oauthToken param is kept only for backwards-compatibility; it is ignored.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { getActiveSlot, getNextSlot, stripExpiredSlots, nowMinutes } from '../lib/slotUtils';
 import { gasUpdateStation } from '../lib/gasClient';
 
 /**
- * @param {object[]} stations      — raw stations from Google Sheets (already sorted by id)
+ * @param {object[]} stations      — raw stations from Google Sheets (sorted by id)
  * @param {function} refetch       — React Query refetch callback
- * @param {string|null} oauthToken — kept for API compatibility; unused (GAS handles auth)
+ * @param {string|null} oauthToken — ignored; kept for API compatibility
  */
-export default function useSlotScheduler(stations, refetch, oauthToken = null) {
+export default function useSlotScheduler(stations, refetch, oauthToken = null) { // eslint-disable-line no-unused-vars
   const stationsRef = useRef(stations);
   useEffect(() => { stationsRef.current = stations; }, [stations]);
 
@@ -34,7 +30,6 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
     const current = stationsRef.current;
     if (!current?.length) return;
 
-    // Sort by numeric station id to match Google Sheets row order.
     const sorted = [...current].sort((a, b) => Number(a.id) - Number(b.id));
     let anyChange = false;
 
@@ -46,7 +41,7 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
         : String(s.bookedSlots ?? '').split(',').map(x => x.trim()).filter(Boolean);
 
       if (!slots.length) {
-        // No bookings at all — if somehow marked occupied, free it
+        // No bookings — if somehow still marked occupied, free it
         if (s.status === 'occupied') {
           try {
             await gasUpdateStation(rowIndex, {
@@ -67,8 +62,8 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
         continue;
       }
 
-      const active  = getActiveSlot(slots, now);
-      const cleaned = stripExpiredSlots(slots, now);
+      const active      = getActiveSlot(slots, now);
+      const cleaned     = stripExpiredSlots(slots, now);
       const slotsDiffer = cleaned.length !== slots.length;
 
       let newStatus      = s.status;
@@ -107,6 +102,7 @@ export default function useSlotScheduler(stations, refetch, oauthToken = null) {
       if (slotsDiffer || statusChanged || gameChanged || activeSlotChanged) {
         anyChange = true;
         try {
+          // Always write — gasUpdateStation uses GAS Web App (no token needed)
           await gasUpdateStation(rowIndex, {
             id:            s.id,
             stationName:   s.stationName   ?? '',
