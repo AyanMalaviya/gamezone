@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star,
   RefreshCw, CheckCircle2, AlertTriangle, Users, Plus,
-  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff,
+  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff, Lock,
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import useStationData from '../hooks/useStationData';
@@ -13,7 +13,6 @@ import { listAllUsers, updateUserProfile, setUserRole } from '../hooks/useUsers'
 import Navbar from '../components/Navbar';
 import '../styles/admin.css';
 
-// ─── Google icon ───────────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -63,7 +62,6 @@ const StatCard = ({ label, value, Icon, glow }) => {
 
 const SESSION_USER_KEY = 'gz_admin_user';
 
-// ─── LoginPage ─────────────────────────────────────────────────────────────────
 const LoginPage = ({ onLogin, busy, error }) => (
   <div className="adm-login-wrap">
     <NeonBg />
@@ -94,7 +92,19 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── StationRow ─────────────────────────────────────────────────────────────────
+// ─── Locked cell — used for Station ID, Name, Type (never editable) ───────────────
+const LockedCell = ({ value, title }) => (
+  <span title={title ?? 'This field is locked and cannot be edited'} style={{
+    display: 'inline-flex', alignItems: 'center', gap: 5,
+    fontSize: '0.8rem', color: 'rgba(255,255,255,0.45)',
+    fontWeight: 600, userSelect: 'none',
+  }}>
+    {value || '—'}
+    <Lock size={10} color="rgba(255,255,255,0.2)" />
+  </span>
+);
+
+// ─── StationRow ───────────────────────────────────────────────────────────────────────
 const StationRow = ({ station, rowIndex }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
@@ -102,6 +112,8 @@ const StationRow = ({ station, rowIndex }) => {
     if (slot.start24 && slot.end24) return `${slot.start24}-${slot.end24}`;
     return '';
   };
+
+  // Only editable fields — id, stationName, stationType are LOCKED and never sent
   const init = () => ({
     status:        station.status        || 'available',
     activeSlot:    serSlot(station.activeSlot),
@@ -111,11 +123,13 @@ const StationRow = ({ station, rowIndex }) => {
     currentGame:   station.currentGame   || '',
     preferredGame: station.preferredGame || '',
   });
+
   const [form, setForm]     = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(null);
 
+  // Re-sync editable fields when live data refreshes
   useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
 
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
@@ -123,11 +137,12 @@ const StationRow = ({ station, rowIndex }) => {
   const onSave = async () => {
     setSaving(true); setErr(null);
     try {
-      // gasUpdateStation sends to GAS Web App — no OAuth token needed
+      // id, stationName, stationType are read from the station prop (locked source of truth)
+      // They are NEVER taken from the form so they can’t drift
       await gasUpdateStation(rowIndex, {
-        id:            station.id          ?? '',
-        stationName:   station.stationName ?? '',
-        stationType:   station.stationType ?? 'ps5',
+        id:            station.id          ?? '',   // 🔒 locked — always from sheet
+        stationName:   station.stationName ?? '',   // 🔒 locked — always from sheet
+        stationType:   station.stationType ?? 'ps5',// 🔒 locked — always from sheet
         status:        form.status,
         activeSlot:    form.activeSlot     || null,
         bookedSlots:   form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
@@ -145,17 +160,18 @@ const StationRow = ({ station, rowIndex }) => {
 
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
+      {/* 🔒 LOCKED: Station ID */}
       <td className="td-id">
         <div className="id-badge">
           <span>{typeLabel} {String(station.id || rowIndex + 1).padStart(2, '0')}</span>
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
+      {/* 🔒 LOCKED: Station Name */}
       <td className="td-i" style={{ minWidth: 130 }}>
-        <span style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>
-          {station.stationName || '—'}
-        </span>
+        <LockedCell value={station.stationName} title="Station name is locked — edit it directly in Google Sheets" />
       </td>
+      {/* 🔒 LOCKED: Type (shown in the ID badge as emoji, also locked) */}
       <td className="td-s">
         <select name="status" value={form.status} onChange={onChange}
           className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
@@ -194,14 +210,12 @@ const StationRow = ({ station, rowIndex }) => {
   );
 };
 
-// ─── input style helper ─────────────────────────────────────────────────────────────────
 const inputStyle = {
   width: '100%', padding: '8px 10px', borderRadius: 7,
   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
   color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
 };
 
-// ─── UserRow ─────────────────────────────────────────────────────────────────────
 const UserRow = ({ user, onUpdate, onRoleChange }) => {
   const [expanded, setExpanded] = useState(false);
   const isAdmin = user.role === 'admin';
@@ -398,7 +412,6 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
   );
 };
 
-// ─── AdminDashboard ─────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [adminUser,  setAdminUser]  = useState(null);
   const [loginBusy,  setLoginBusy]  = useState(false);
@@ -413,7 +426,6 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const zapRef   = useRef(null);
 
-  // Restore session from sessionStorage (user object only, no token needed)
   useEffect(() => {
     const userJson = sessionStorage.getItem(SESSION_USER_KEY);
     if (userJson) {
@@ -458,8 +470,6 @@ export default function AdminDashboard() {
   const handleLogin = async () => {
     setLoginBusy(true); setLoginError(null);
     try {
-      // adminGoogleProvider includes Sheets scope for session token (legacy)
-      // All Sheets writes now go through gasClient — no token stored in sessionStorage
       const result  = await signInWithPopup(auth, adminGoogleProvider);
       const userObj = {
         uid: result.user.uid, email: result.user.email,
@@ -569,7 +579,13 @@ export default function AdminDashboard() {
                   <table className="tbl">
                     <thead>
                       <tr className="tbl-head">
-                        {['#','Station Name','Status','Active Slot','Booked Slots','Current Game','Preferred Game',''].map((h, i) => (
+                        {[
+                          '#',
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
+                            Station Name <Lock size={10} color="rgba(255,255,255,0.25)" />
+                          </span>,
+                          'Status', 'Active Slot', 'Booked Slots', 'Current Game', 'Preferred Game', ''
+                        ].map((h, i) => (
                           <th key={i} className="tbl-th">{h}</th>
                         ))}
                       </tr>
