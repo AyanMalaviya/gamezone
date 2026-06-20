@@ -8,7 +8,7 @@ import {
   sendEmailVerification,
   GoogleAuthProvider,
 } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth, googleProvider, adminGoogleProvider } from '../lib/firebase';
 import { createUserProfile, getUserProfile, savePhoneNumber } from './useUserProfile';
 import useAuthStore from '../store/authStore';
 
@@ -24,7 +24,7 @@ export async function loginWithEmail(email, password) {
   return cred;
 }
 
-// ─── Email register ───────────────────────────────────────────────────────────
+// ─── Email register ──────────────────────────────────────────────────────────
 export async function registerWithEmail(email, password, phoneOrName) {
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   const isPhone = /^[+\d]/.test(phoneOrName);
@@ -34,30 +34,20 @@ export async function registerWithEmail(email, password, phoneOrName) {
     phone: isPhone ? phoneOrName : '',
   });
   await sendEmailVerification(cred.user);
-  await signOut(auth); // force verify before login
+  await signOut(auth);
   return cred;
 }
 
-// ─── Google login ─────────────────────────────────────────────────────────────
+// ─── Google login (members) ─────────────────────────────────────────────────────
 /**
- * loginWithGoogle
- *
- * Captures the OAuth2 access_token immediately from the popup result
- * (it is NOT available later via onAuthStateChanged) and stores it
- * in Zustand for Sheets write operations.
+ * loginWithGoogle — standard member sign-in.
+ * Only requests basic profile + email. No Sheets scope.
+ * Members will NOT see the "edit Google Sheets" consent screen.
  */
 export async function loginWithGoogle() {
   const result = await signInWithPopup(auth, googleProvider);
 
-  // Correct way to extract OAuth credential & access token
-  const credential  = GoogleAuthProvider.credentialFromResult(result);
-  const accessToken = credential?.accessToken ?? null;
-
-  if (accessToken) {
-    useAuthStore.getState().setOauthToken(accessToken);
-  }
-
-  // Create Firestore profile on first sign-in
+  // No Sheets scope — accessToken not stored (not needed for members)
   const existing = await getUserProfile(result.user.uid);
   if (!existing) {
     await createUserProfile(result.user.uid, {
@@ -66,7 +56,33 @@ export async function loginWithGoogle() {
       phone: '',
     });
   }
+  return result;
+}
 
+// ─── Google login (admin only) ──────────────────────────────────────────────────
+/**
+ * loginWithGoogleAdmin — admin sign-in with Sheets write scope.
+ * Call this ONLY from the admin login flow (AdminDashboard or admin
+ * section of AuthPage). Stores the OAuth access_token in Zustand
+ * so the dashboard can write to Google Sheets.
+ */
+export async function loginWithGoogleAdmin() {
+  const result = await signInWithPopup(auth, adminGoogleProvider);
+
+  const credential  = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken ?? null;
+  if (accessToken) {
+    useAuthStore.getState().setOauthToken(accessToken);
+  }
+
+  const existing = await getUserProfile(result.user.uid);
+  if (!existing) {
+    await createUserProfile(result.user.uid, {
+      email: result.user.email,
+      name:  result.user.displayName || '',
+      phone: '',
+    });
+  }
   return result;
 }
 
@@ -75,7 +91,7 @@ export async function savePhone(uid, phone) {
   return savePhoneNumber(uid, phone);
 }
 
-// ─── App-level auth listener (App.jsx) ───────────────────────────────────────
+// ─── App-level auth listener (App.jsx) ──────────────────────────────────────────
 export function useAuthListener() {
   const setUser    = useAuthStore(s => s.setUser);
   const setRole    = useAuthStore(s => s.setRole);
