@@ -5,6 +5,11 @@
  *   1. oauthToken  (Google-signed-in admin or member)
  *   2. VITE_SHEETS_SERVICE_KEY  (service account — works for all users)
  *
+ * Slot lifecycle (managed jointly by this file + Apps Script):
+ *   - On booking:       slot added to Booked Slots (F), status stays "available"
+ *   - At slot start:    Apps Script moves slot to Active Slot (E), sets occupied
+ *   - At slot end:      Apps Script clears Active Slot, resets to available
+ *
  * "Stations" tab column layout (A–H):
  *   A  Station ID   B  Station Name   C  Type   D  Status
  *   E  Active Slot  F  Booked Slots   G  Current Game   H  Preferred Game
@@ -166,12 +171,18 @@ export const updateStation = async (rowIndex, data, oauthToken) => {
 };
 
 /**
- * updateStationOnBooking — called automatically after a successful payment.
- * Adds the newly booked slot to F (Booked Slots) and sets the station occupied.
- * Uses VITE_SHEETS_SERVICE_KEY so it works for ALL users, not just Google sign-in.
+ * updateStationOnBooking — called after a successful payment.
+ *
+ * ONLY appends the new slot to Booked Slots (F) and preserves current status.
+ * Does NOT set status=occupied or touch Active Slot (E).
+ * The Apps Script (gamezone_cleanup.gs) is responsible for:
+ *   - Moving the slot from Booked Slots to Active Slot when start time arrives
+ *   - Setting status=occupied at that point
+ *   - Clearing Active Slot and resetting to available when end time passes
  *
  * meta shape: { stationIndex, stationId, stationName, stationType,
- *               slot, game, preferredGame, bookedSlots, activeSlot }
+ *               slot, currentStatus, activeSlot, bookedSlots,
+ *               currentGame, preferredGame }
  */
 export const updateStationOnBooking = async (meta, oauthToken) => {
   const hdrs = writeHeaders(oauthToken);
@@ -190,8 +201,9 @@ export const updateStationOnBooking = async (meta, oauthToken) => {
   try {
     const { sheetId } = getSheetsEnv();
     const sheetTitle  = await getSheetTitle();
-    const sheetRow    = Number(stationIndex) + 2; // +1 for header, +1 for 1-based
+    const sheetRow    = Number(stationIndex) + 2;
 
+    // Merge new slot into existing booked slots — no duplicates
     const existingSlots = Array.isArray(meta.bookedSlots) ? meta.bookedSlots : [];
     const updatedSlots  = meta.slot
       ? [...new Set([...existingSlots, meta.slot])]
@@ -199,14 +211,14 @@ export const updateStationOnBooking = async (meta, oauthToken) => {
 
     const range  = `${sheetTitle}!A${sheetRow}:H${sheetRow}`;
     const values = [[
-      meta.stationId     ?? '',
-      meta.stationName   ?? '',
-      meta.stationType   ?? 'ps5',
-      'occupied',
-      serializeActiveSlot(meta.slot ?? meta.activeSlot ?? null),
-      serializeBookedSlots(updatedSlots),
-      meta.game          ?? '',
-      meta.preferredGame ?? '',
+      meta.stationId      ?? '',
+      meta.stationName    ?? '',
+      meta.stationType    ?? 'ps5',
+      meta.currentStatus  ?? 'available',        // preserve current status — DO NOT set occupied
+      serializeActiveSlot(meta.activeSlot ?? null), // preserve current active slot unchanged
+      serializeBookedSlots(updatedSlots),           // only this changes — new slot appended
+      meta.currentGame    ?? '',
+      meta.preferredGame  ?? '',
     ]];
 
     const res = await fetch(
@@ -218,7 +230,8 @@ export const updateStationOnBooking = async (meta, oauthToken) => {
       const err = await res.json().catch(() => ({}));
       console.warn('[sheets] updateStationOnBooking failed:', err?.error?.message ?? res.status);
     } else {
-      if (import.meta.env.DEV) console.info('[sheets] Station row updated after booking:', meta.stationName);
+      if (import.meta.env.DEV)
+        console.info('[sheets] Booked slot added to station row:', meta.stationName, '| slot:', meta.slot);
     }
   } catch (e) {
     console.warn('[sheets] updateStationOnBooking error:', e.message);
