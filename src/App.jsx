@@ -12,8 +12,15 @@ import ProtectedRoute     from './components/ProtectedRoute';
 import ScrollToTop        from './components/ScrollToTop';
 import UpiPaymentModal    from './components/UpiPaymentModal';
 import InstallPrompt      from './components/InstallPrompt';
+import { useAuthListener } from './hooks/useAuth';
 
 export default function App() {
+  // Mount the global Firebase auth listener once.
+  // This keeps authStore (user, role, phone, loading) in sync with Firebase.
+  // Without this, Google sign-in completes in Firebase but the store never
+  // updates, so AuthPage's redirect useEffect never fires.
+  useAuthListener();
+
   return (
     <>
       <ScrollToTop />
