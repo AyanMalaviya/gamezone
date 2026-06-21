@@ -1,12 +1,16 @@
 /**
  * usePWA — centralised PWA hook
  *
- * Exposes:
- *   isInstallable  — true when the browser has fired beforeinstallprompt
- *   isInstalled    — true when running in standalone (already installed)
- *   installApp()   — triggers the native install prompt
- *   updateReady    — true when a new SW version is waiting
- *   applyUpdate()  — tells the waiting SW to activate immediately, then reloads
+ * SW registration is handled entirely by vite-plugin-pwa (registerType: autoUpdate).
+ * This hook ONLY manages:
+ *   - beforeinstallprompt  → install banner
+ *   - appinstalled         → hide banner
+ *   - display-mode media   → detect standalone
+ *   - updateReady          → “Update available” toast (only when a previous
+ *                            SW controller already exists, i.e. returning user)
+ *
+ * We do NOT manually call navigator.serviceWorker.register() here.
+ * Doing so alongside vite-plugin-pwa causes dual-SW conflicts → reload loops.
  */
 import { useState, useEffect, useRef } from 'react';
 
@@ -15,16 +19,15 @@ export default function usePWA() {
   const [isInstalled,   setIsInstalled]   = useState(false);
   const [updateReady,   setUpdateReady]   = useState(false);
   const deferredPrompt = useRef(null);
-  const swReg          = useRef(null);
 
   useEffect(() => {
-    // ── Detect standalone mode (already installed) ────────────────────────────
+    // ── Detect standalone (already installed as PWA) ──────────────────────────
     const mq = window.matchMedia('(display-mode: standalone)');
-    setIsInstalled(mq.matches || window.navigator.standalone === true);
-    const onChange = e => setIsInstalled(e.matches);
-    mq.addEventListener('change', onChange);
+    setIsInstalled(mq.matches || !!window.navigator.standalone);
+    const onMQChange = e => setIsInstalled(e.matches);
+    mq.addEventListener('change', onMQChange);
 
-    // ── Capture the install prompt ────────────────────────────────────────────
+    // ── Capture install prompt ────────────────────────────────────────────────
     const onBIP = e => {
       e.preventDefault();
       deferredPrompt.current = e;
@@ -32,7 +35,7 @@ export default function usePWA() {
     };
     window.addEventListener('beforeinstallprompt', onBIP);
 
-    // ── Hide button after install ─────────────────────────────────────────────
+    // ── Hide banner after user installs ──────────────────────────────────────
     const onAppInstalled = () => {
       deferredPrompt.current = null;
       setIsInstallable(false);
@@ -40,47 +43,41 @@ export default function usePWA() {
     };
     window.addEventListener('appinstalled', onAppInstalled);
 
-    // ── Register Service Worker ───────────────────────────────────────────────
+    // ── Detect SW updates via vite-plugin-pwa’s already-registered SW ────────
+    // navigator.serviceWorker.ready resolves with the SW that vite-plugin-pwa
+    // registered — no double registration.
+    // Only show “Update available” when controller exists (= returning visitor).
+    // First-time visitors have controller === null, so we skip the toast.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(reg => {
-          swReg.current = reg;
+      navigator.serviceWorker.ready.then(reg => {
+        // Already waiting on page load (tab was open during a deploy)
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          setUpdateReady(true);
+        }
 
-          // A new SW is already waiting (page was already open)
-          if (reg.waiting) setUpdateReady(true);
-
-          // New SW found while page is open
-          reg.addEventListener('updatefound', () => {
-            const newSW = reg.installing;
-            if (!newSW) return;
-            newSW.addEventListener('statechange', () => {
-              if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-                setUpdateReady(true);
-              }
-            });
+        reg.addEventListener('updatefound', () => {
+          const newSW = reg.installing;
+          if (!newSW) return;
+          newSW.addEventListener('statechange', () => {
+            if (
+              newSW.state === 'installed' &&
+              navigator.serviceWorker.controller  // null on first install → skip
+            ) {
+              setUpdateReady(true);
+            }
           });
-        })
-        .catch(err => console.warn('[SW] Registration failed:', err));
-
-      // Listen for message from SW
-      navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data === 'UPDATE_READY') setUpdateReady(true);
-      });
-
-      // Reload all tabs when SW takes control
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) { refreshing = true; window.location.reload(); }
-      });
+        });
+      }).catch(() => {}); // SW not ready yet in non-PWA browsers — silently ignore
     }
 
     return () => {
-      mq.removeEventListener('change', onChange);
+      mq.removeEventListener('change', onMQChange);
       window.removeEventListener('beforeinstallprompt', onBIP);
       window.removeEventListener('appinstalled', onAppInstalled);
     };
   }, []);
 
+  // ── Install ───────────────────────────────────────────────────────────────
   const installApp = async () => {
     if (!deferredPrompt.current) return;
     deferredPrompt.current.prompt();
@@ -91,14 +88,21 @@ export default function usePWA() {
     }
   };
 
-  const applyUpdate = () => {
-    const reg = swReg.current;
-    if (!reg) return;
-    const sw = reg.waiting;
-    if (sw) {
-      sw.postMessage('SKIP_WAITING');
+  // ── Apply update ──────────────────────────────────────────────────────────
+  // The controllerchange → reload listener lives HERE (not globally) so it
+  // only fires when the user explicitly clicks “Reload” — not on every SW swap.
+  const applyUpdate = async () => {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    if (reg.waiting) {
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!reloading) { reloading = true; window.location.reload(); }
+      });
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      window.location.reload();
     }
-    // controllerchange listener above will reload
   };
 
   return { isInstallable, isInstalled, installApp, updateReady, applyUpdate };
