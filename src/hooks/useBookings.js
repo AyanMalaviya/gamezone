@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   collection, query, where, orderBy, onSnapshot,
-  doc, updateDoc, deleteDoc,
+  doc, updateDoc, deleteDoc, getDoc,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { gasRemoveBookedSlot } from '../lib/gasClient';
 
 /**
  * useBookings — real-time listener for a single user's bookings.
@@ -54,9 +55,29 @@ export function useAllBookings() {
     await updateDoc(doc(db, 'bookings', id), fields);
   }, []);
 
-  /** Permanently delete a booking document */
+  /**
+   * Delete a booking from Firestore AND remove its slot from the
+   * station's Booked Slots column in Google Sheets.
+   *
+   * Flow:
+   *  1. Read the booking doc to get stationId + slot before deleting.
+   *  2. Delete the Firestore doc (user profile updates via real-time listener).
+   *  3. Call gasRemoveBookedSlot so the Sheets station row is also updated.
+   */
   const deleteBooking = useCallback(async (id) => {
+    // 1. Snapshot the booking before deletion so we have stationId + slot
+    const snap = await getDoc(doc(db, 'bookings', id));
+    const data = snap.exists() ? snap.data() : null;
+
+    // 2. Delete from Firestore
     await deleteDoc(doc(db, 'bookings', id));
+
+    // 3. Sync slot removal to Sheets (fire-and-forget; no-cors so no await needed)
+    if (data?.stationId && data?.slot) {
+      gasRemoveBookedSlot({ stationId: data.stationId, slot: data.slot });
+    } else {
+      console.warn('[deleteBooking] Missing stationId or slot on booking', id, data);
+    }
   }, []);
 
   return { bookings, loading, error, updateBooking, deleteBooking };

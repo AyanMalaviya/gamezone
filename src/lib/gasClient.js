@@ -45,9 +45,22 @@ export function gasAddBooking({ txnId, uid, stationName, slot, hours, amount, up
   return gasGet({ action: 'addBooking', txnId, uid, stationName, slot, hours, amount, upiId, bank, status });
 }
 
-/** Add a booked slot to the station’s Booked Slots column. */
+/** Add a booked slot to the station's Booked Slots column. */
 export function gasAddBookedSlot({ stationId, stationName, slot }) {
   return gasGet({ action: 'addBookedSlot', stationId, stationName, slot });
+}
+
+/**
+ * Remove a single slot from the station's Booked Slots column.
+ * Called when a booking is deleted from the admin dashboard.
+ * GAS finds the station row by stationId and splices the slot out
+ * of the comma-separated Booked Slots cell.
+ *
+ * @param {string|number} stationId — column A value (e.g. "7")
+ * @param {string}        slot      — exact slot string to remove (e.g. "14:00-15:00")
+ */
+export function gasRemoveBookedSlot({ stationId, slot }) {
+  return gasGet({ action: 'removeBookedSlot', stationId, slot });
 }
 
 /** Append a new user row to the Users sheet. */
