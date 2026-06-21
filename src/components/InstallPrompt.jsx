@@ -85,9 +85,9 @@ export default function InstallPrompt() {
           animation: 'pwa-slide-up 0.35s cubic-bezier(0.34,1.56,0.64,1) both',
         }}>
           <img
-            src="/icons/icon-72.png"
+            src="/icons/icon-128.png"
             alt="GameZone"
-            style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, background: '#7c3aed' }}
+            style={{ width: 42, height: 42, flexShrink: 0 }}
           />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#fff' }}>Install GameZone</div>
