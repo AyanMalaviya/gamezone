@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UserCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import { ADMIN_PATH } from '../App';
+
+const ADMIN_PATH = 'admin'; // matches <Route path="/admin" /> in App.jsx
 
 const PUBLIC_NAV = [
   { label: 'Home',     href: '/' },
@@ -55,42 +56,33 @@ const GameZoneLogo = ({ size = 36 }) => (
 );
 
 export default function Navbar() {
-  const [scrolled,    setScrolled]    = useState(false);
-  const [navHidden,   setNavHidden]   = useState(false);
-  const [mobileOpen,  setMobile]      = useState(false);
-  const lastScrollY   = useRef(0);
-  const ticking       = useRef(false);
-  const location      = useLocation();
-  const navigate      = useNavigate();
+  const [scrolled,   setScrolled]  = useState(false);
+  const [navHidden,  setNavHidden] = useState(false);
+  const [mobileOpen, setMobile]    = useState(false);
+  const lastScrollY  = useRef(0);
+  const ticking      = useRef(false);
+  const location     = useLocation();
+  const navigate     = useNavigate();
   const { user, role, phone, logout } = useAuthStore();
   const isAdmin = role === 'admin';
 
   useEffect(() => {
-    const HIDE_THRESHOLD   = 80;  // px scrolled before hide kicks in
-    const SCROLL_DELTA     = 6;   // px delta needed to trigger hide/show
+    const HIDE_THRESHOLD = 80;
+    const SCROLL_DELTA   = 6;
 
     const onScroll = () => {
       if (ticking.current) return;
       ticking.current = true;
-
       requestAnimationFrame(() => {
         const y     = window.scrollY;
         const delta = y - lastScrollY.current;
-
-        // Scrolled enough to blur background
         setScrolled(y > 30);
-
-        // Hide on scroll-down, show on scroll-up
         if (y > HIDE_THRESHOLD) {
-          if (delta > SCROLL_DELTA) {
-            setNavHidden(true);      // scrolling down → hide
-          } else if (delta < -SCROLL_DELTA) {
-            setNavHidden(false);     // scrolling up → show
-          }
+          if (delta > SCROLL_DELTA)       setNavHidden(true);
+          else if (delta < -SCROLL_DELTA) setNavHidden(false);
         } else {
-          setNavHidden(false);       // near top → always show
+          setNavHidden(false);
         }
-
         lastScrollY.current = y;
         ticking.current = false;
       });
@@ -100,13 +92,8 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // Close mobile drawer on route change
   useEffect(() => { setMobile(false); }, [location.pathname]);
-
-  // Show navbar when mobile menu is open (prevent it from hiding while interacting)
-  useEffect(() => {
-    if (mobileOpen) setNavHidden(false);
-  }, [mobileOpen]);
+  useEffect(() => { if (mobileOpen) setNavHidden(false); }, [mobileOpen]);
 
   const isActive = (href) =>
     href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
@@ -114,20 +101,13 @@ export default function Navbar() {
   const goAuth = (mode) => { navigate(`/auth/${mode}`); setMobile(false); };
 
   const handleDashboardClick = (e) => {
-    e.preventDefault(); setMobile(false);
+    e.preventDefault();
+    setMobile(false);
     navigate(`/${ADMIN_PATH}`);
   };
 
-  const navClass = [
-    'navbar-root',
-    scrolled  ? 'navbar-scrolled' : '',
-    navHidden ? 'navbar-hidden'   : '',
-  ].filter(Boolean).join(' ');
-
-  const borderClass = [
-    'navbar-border-light',
-    navHidden ? 'navbar-hidden-border' : '',
-  ].filter(Boolean).join(' ');
+  const navClass = ['navbar-root', scrolled ? 'navbar-scrolled' : '', navHidden ? 'navbar-hidden' : ''].filter(Boolean).join(' ');
+  const borderClass = ['navbar-border-light', navHidden ? 'navbar-hidden-border' : ''].filter(Boolean).join(' ');
 
   return (
     <>
@@ -138,9 +118,7 @@ export default function Navbar() {
 
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <GameZoneLogo size={36} />
-            <span className="navbar-logo-text">
-              GAME<span className="navbar-logo-accent">ZONE</span>
-            </span>
+            <span className="navbar-logo-text">GAME<span className="navbar-logo-accent">ZONE</span></span>
           </Link>
 
           <nav className="navbar-links" aria-label="Primary navigation">
