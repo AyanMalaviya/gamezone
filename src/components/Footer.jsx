@@ -39,9 +39,10 @@ function injectStyles() {
       text-decoration: none;
     }
     .gz-footer-logo img {
-      width: 32px;
-      height: 32px;
+      width: 36px;
+      height: 36px;
       object-fit: contain;
+      border-radius: 8px;
     }
     .gz-footer-logo span {
       font-family: 'Rajdhani','Inter',sans-serif;
@@ -127,14 +128,18 @@ export default function Footer() {
       <div className="gz-footer-inner">
         <div className="gz-footer-top">
 
-          {/* Brand — use favicon.ico which is guaranteed to exist */}
+          {/* Brand */}
           <div className="gz-footer-brand">
             <Link to="/" className="gz-footer-logo">
-              <img src="/favicon.ico" alt="GameZone" />
+              <img
+                src="/logo.png"
+                alt="GameZone"
+                onError={e => { e.currentTarget.src = '/icons/icon-192.png'; }}
+              />
               <span>GAMEZONE</span>
             </Link>
             <p className="gz-footer-tagline">
-              Premium gaming lounge · PS5 &amp; Racing Simulator · Real-time seat booking
+              Premium gaming lounge &middot; PS5 &amp; Racing Simulator &middot; Real-time seat booking
             </p>
           </div>
 

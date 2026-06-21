@@ -1,16 +1,17 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import LandingPage       from './pages/LandingPage';
-import StationLayout     from './pages/StationLayout';
-import PricingPage       from './pages/PricingPage';
-import AuthPage          from './pages/AuthPage';
-import ProfilePage       from './pages/ProfilePage';
-import TransactionsPage  from './pages/TransactionsPage';
-import AdminDashboard    from './pages/AdminDashboard';
-import PrivacyPolicy     from './pages/PrivacyPolicy';
+import LandingPage        from './pages/LandingPage';
+import StationLayout      from './pages/StationLayout';
+import PricingPage        from './pages/PricingPage';
+import AuthPage           from './pages/AuthPage';
+import ProfilePage        from './pages/ProfilePage';
+import TransactionsPage   from './pages/TransactionsPage';
+import AdminDashboard     from './pages/AdminDashboard';
+import PrivacyPolicy      from './pages/PrivacyPolicy';
 import TermsAndConditions from './pages/TermsAndConditions';
-import ProtectedRoute    from './components/ProtectedRoute';
-import ScrollToTop       from './components/ScrollToTop';
-import UpiPaymentModal   from './components/UpiPaymentModal';
+import ProtectedRoute     from './components/ProtectedRoute';
+import ScrollToTop        from './components/ScrollToTop';
+import UpiPaymentModal    from './components/UpiPaymentModal';
+import InstallPrompt      from './components/InstallPrompt';
 
 export default function App() {
   return (
@@ -34,8 +35,9 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      {/* Global UPI payment modal — lives outside routes so it persists */}
+      {/* Global modals & PWA UI — outside routes so they persist across navigation */}
       <UpiPaymentModal />
+      <InstallPrompt />
     </>
   );
 }
