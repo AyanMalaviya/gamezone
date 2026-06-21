@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { X, Clock, Gamepad2, Zap, Monitor, Loader2, Edit3, Check, CreditCard, ChevronLeft, CalendarClock, Phone, AlertCircle } from 'lucide-react';
+import { X, Clock, Gamepad2, Zap, Monitor, Loader2, Edit3, Check, CreditCard, ChevronLeft, CalendarClock, Phone } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import usePaymentStore from '../store/paymentStore';
 import CompleteProfileModal from './CompleteProfileModal';
@@ -37,8 +37,8 @@ const statusConfig = {
 const isRacingStation = (s) =>
   String(s?.id) === '8' || String(s?.stationType).toLowerCase() === 'racing';
 
-const PRICE_RACING    = 250;
-const PRICE_PS5       = 100;
+const PRICE_RACING     = 250;
+const PRICE_PS5        = 100;
 const MAX_HOURS_RACING = 2;
 const MAX_HOURS_PS5    = 4;
 
@@ -54,7 +54,7 @@ const Skel = ({ w = '100%', h = 14, r = 8, delay = 0 }) => (
 function fmtSlot(slotStr) {
   const p = parseSlot(slotStr);
   if (!p) return slotStr;
-  return `${toAmPm(p.start24)} \u2013 ${toAmPm(p.end24)}`;
+  return `${toAmPm(p.start24)} – ${toAmPm(p.end24)}`;
 }
 
 function getDisplayName(station, isRacing) {
@@ -134,7 +134,7 @@ function StartTimePicker({ startTimes, cfg, onSelect, onBack }) {
 
 /* Step 2 — Pick Duration */
 function DurationPicker({ startTime, cfg, ratePerHour, maxHours, phone, onConfirm, onBack }) {
-  const closeMin  = 24 * 60;
+  const closeMin     = 24 * 60;
   const maxFromClose = Math.floor((closeMin - startTime.startMin) / 60);
   let cap = Math.min(maxHours, maxFromClose);
 
@@ -210,17 +210,17 @@ function DurationPicker({ startTime, cfg, ratePerHour, maxHours, phone, onConfir
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>SESSION</span>
           <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, color: '#e2e8f0', fontSize: '0.9rem' }}>
-            {startTime.label} \u2013 {toAmPm(end24)}
+            {startTime.label} – {toAmPm(end24)}
           </span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em' }}>TOTAL</span>
           <span style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 800, color: cfg.color, fontSize: '1.3rem' }}>
-            \u20b9{totalAmt}
+            ₹{totalAmt}
           </span>
         </div>
         <div style={{ marginTop: 4, fontSize: '0.62rem', color: 'rgba(255,255,255,0.25)' }}>
-          \u20b9{ratePerHour}/hr \xd7 {safeSel} hr{safeSel > 1 ? 's' : ''}
+          ₹{ratePerHour}/hr × {safeSel} hr{safeSel > 1 ? 's' : ''}
         </div>
       </div>
 
@@ -261,7 +261,7 @@ function DurationPicker({ startTime, cfg, ratePerHour, maxHours, phone, onConfir
         onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
         onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; }}
       >
-        <CreditCard size={16} /> Book & Pay \u20b9{totalAmt} via UPI
+        <CreditCard size={16} /> Book & Pay ₹{totalAmt} via UPI
       </button>
     </div>
   );
@@ -279,7 +279,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
   const user      = useAuthStore(s => s.user);
   const phone     = useAuthStore(s => s.phone);
-  const setPhone  = useAuthStore(s => s.setPhone);   // ✔ grab setter
+  const setPhone  = useAuthStore(s => s.setPhone);
   const navigate  = useNavigate();
   const openPayment = usePaymentStore(s => s.openPayment);
 
@@ -297,15 +297,15 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
   if (!station) return null;
 
-  const isRacing   = isRacingStation(station);
-  const isOccupied = station.status?.toLowerCase() === 'occupied' || !!station.activeSlot;
-  const key        = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
-  const cfg        = statusConfig[key];
+  const isRacing    = isRacingStation(station);
+  const isOccupied  = station.status?.toLowerCase() === 'occupied' || !!station.activeSlot;
+  const key         = isRacing ? 'racing' : (isOccupied ? 'occupied' : 'available');
+  const cfg         = statusConfig[key];
   const displayName = getDisplayName(station, isRacing);
   const ratePerHour = isRacing ? PRICE_RACING : PRICE_PS5;
   const maxHours    = isRacing ? MAX_HOURS_RACING : MAX_HOURS_PS5;
 
-  const now        = nowMinutes();
+  const now         = nowMinutes();
   const slots = Array.isArray(station.bookedSlots)
     ? station.bookedSlots.filter(Boolean)
     : String(station.bookedSlots ?? '').split(',').map(s => s.trim()).filter(Boolean);
@@ -316,18 +316,19 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
   const canEdit     = !!user && !!phone && !!activeSlot;
   const startTimes  = generateStartTimes(slots);
 
+  // Allow booking a future slot even when currently occupied — only block if no slots left at all.
+  const canBook = startTimes.length > 0;
+
   const handleBookClick = () => {
     if (!user) { onClose(); navigate('/auth/login'); return; }
     if (!phone) { setPhoneGate(true); return; }
     setView('start');
   };
 
-  // ✔ Called by CompleteProfileModal when phone is saved—immediately update store so
-  // the booking flow can continue without a page reload.
   const handlePhoneSaved = (savedPhone) => {
-    setPhone(savedPhone);      // updates authStore.phone → triggers re-render
-    setPhoneGate(false);       // close gate modal
-    setView('start');          // jump straight into booking flow
+    setPhone(savedPhone);
+    setPhoneGate(false);
+    setView('start');
   };
 
   const handleStartSelected = (st) => {
@@ -337,10 +338,9 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
   const handleConfirmBooking = ({ slotValue, totalAmt, hours }) => {
     const resolvedIndex = stationIndex != null ? Number(stationIndex) : Number(station.id) - 1;
-
     openPayment({
       type:   'booking',
-      label:  `${displayName} \u2014 ${hours} hr${hours > 1 ? 's' : ''}`,
+      label:  `${displayName} — ${hours} hr${hours > 1 ? 's' : ''}`,
       amount: totalAmt,
       meta: {
         uid:           user?.uid ?? null,
@@ -408,7 +408,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                   </div>
                   <div>
                     <Dialog.Title style={{ fontFamily: "'Rajdhani','Inter',sans-serif", fontWeight: 700, fontSize: '1.18rem', color: '#fff', lineHeight: 1.2, marginBottom: 5 }}>
-                      {isRacing ? '\uD83C\uDFC1 Racing Simulator' : displayName}
+                      {isRacing ? '🏁 Racing Simulator' : displayName}
                     </Dialog.Title>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 99, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, display: 'inline-block', animation: key !== 'available' ? 'sm-pulse-dot 1.4s ease-in-out infinite' : 'none' }} />
@@ -429,7 +429,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
               {(view === 'info' || view === 'start') && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 99, padding: '3px 10px' }}>
-                    \u20b9{ratePerHour}/hr \xb7 max {maxHours} hr{maxHours > 1 ? 's' : ''}
+                    ₹{ratePerHour}/hr · max {maxHours} hr{maxHours > 1 ? 's' : ''}
                   </span>
                 </div>
               )}
@@ -469,9 +469,9 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                         </span>
                         <div>
                           <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#f87171', letterSpacing: '0.1em' }}>
-                            LIVE NOW \xb7 {toAmPm(activeSlot.start24)} \u2013 {toAmPm(activeSlot.end24)}
+                            LIVE NOW · {toAmPm(activeSlot.start24)} – {toAmPm(activeSlot.end24)}
                           </div>
-                          {liveGame && <div style={{ fontSize: '0.82rem', color: '#fca5a5', marginTop: 2 }}>\uD83C\uDFAE {liveGame}</div>}
+                          {liveGame && <div style={{ fontSize: '0.82rem', color: '#fca5a5', marginTop: 2 }}>🎮 {liveGame}</div>}
                         </div>
                         {canEdit && !editing && (
                           <button onClick={() => { setGameInput(liveGame ?? ''); setEditing(true); }} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 7, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)', fontSize: '0.7rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -483,12 +483,12 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
                     {editing && (
                       <div style={{ display: 'flex', gap: 7, marginBottom: 14, animation: 'sm-slot-in 0.2s ease both' }}>
-                        <input autoFocus value={gameInput} onChange={e => setGameInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveGame(); if (e.key === 'Escape') setEditing(false); }} placeholder="Enter game name\u2026" style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: '#fff', fontSize: '0.85rem', outline: 'none' }} />
+                        <input autoFocus value={gameInput} onChange={e => setGameInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleSaveGame(); if (e.key === 'Escape') setEditing(false); }} placeholder="Enter game name…" style={{ flex: 1, padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)', color: '#fff', fontSize: '0.85rem', outline: 'none' }} />
                         <button onClick={handleSaveGame} disabled={saving || !gameInput.trim()} style={{ padding: '8px 14px', borderRadius: 8, background: saveOk ? '#22c55e' : '#7c3aed', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.8rem', fontWeight: 600, opacity: saving ? 0.7 : 1 }}>
                           {saving ? <Loader2 size={13} style={{ animation: 'sm-spin .7s linear infinite' }} /> : <Check size={13} />}
-                          {saving ? 'Saving\u2026' : 'Save'}
+                          {saving ? 'Saving…' : 'Save'}
                         </button>
-                        <button onClick={() => setEditing(false)} style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>\u2715</button>
+                        <button onClick={() => setEditing(false)} style={{ padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>✕</button>
                       </div>
                     )}
 
@@ -499,7 +499,7 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
                       </div>
                       {futureSlots.length === 0 ? (
                         <div style={{ padding: '12px 14px', borderRadius: 10, background: 'rgba(34,197,94,0.07)', border: '1px solid rgba(34,197,94,0.16)', fontSize: '0.83rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Zap size={14} /> {slots.length === 0 ? 'No bookings \u2014 walk in anytime!' : 'No more bookings today'}
+                          <Zap size={14} /> {slots.length === 0 ? 'No bookings — walk in anytime!' : 'No more bookings today'}
                         </div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -527,18 +527,33 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
 
                     <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '16px 0' }} />
 
-                    {!isOccupied && (
-                      <button onClick={handleBookClick} style={{ width: '100%', padding: '13px', borderRadius: 11, border: 'none', background: isRacing ? 'linear-gradient(135deg,#d97706,#f59e0b)' : 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.04em', fontFamily: "'Rajdhani','Inter',sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: isRacing ? '0 4px 20px rgba(217,119,6,0.35)' : '0 4px 20px rgba(124,58,237,0.35)', transition: 'opacity .15s, transform .15s' }}
+                    {/* Book button: always show when future slots exist, even if occupied now */}
+                    {canBook ? (
+                      <button
+                        onClick={handleBookClick}
+                        style={{
+                          width: '100%', padding: '13px', borderRadius: 11, border: 'none',
+                          background: isRacing
+                            ? 'linear-gradient(135deg,#d97706,#f59e0b)'
+                            : 'linear-gradient(135deg,#7c3aed,#a855f7)',
+                          color: '#fff', fontSize: '0.95rem', fontWeight: 700,
+                          cursor: 'pointer', letterSpacing: '0.04em',
+                          fontFamily: "'Rajdhani','Inter',sans-serif",
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                          boxShadow: isRacing ? '0 4px 20px rgba(217,119,6,0.35)' : '0 4px 20px rgba(124,58,237,0.35)',
+                          transition: 'opacity .15s, transform .15s',
+                        }}
                         onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
                         onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; }}
                       >
-                        <CreditCard size={16} /> Book & Pay \u20b9{ratePerHour}/hr via UPI
+                        <CreditCard size={16} />
+                        {isOccupied ? `Book a Future Slot — ₹${ratePerHour}/hr` : `Book & Pay ₹${ratePerHour}/hr via UPI`}
                       </button>
-                    )}
-
-                    {isOccupied && (
+                    ) : (
                       <div style={{ padding: '11px 14px', borderRadius: 10, background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.16)', fontSize: '0.82rem', color: 'rgba(239,68,68,0.75)', textAlign: 'center' }}>
-                        Station is currently occupied. Check back soon!
+                        {isOccupied
+                          ? 'Station fully booked for today. Check back tomorrow!'
+                          : 'No slots available right now.'}
                       </div>
                     )}
                   </>
@@ -549,7 +564,6 @@ export default function StationModal({ station, stationIndex, onClose, onGameUpd
         </Dialog.Portal>
       </Dialog.Root>
 
-      {/* Phone gate modal — onSaved updates store immediately so booking continues */}
       {phoneGate && (
         <CompleteProfileModal
           open={phoneGate}
