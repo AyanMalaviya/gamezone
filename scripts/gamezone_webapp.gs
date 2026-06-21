@@ -7,45 +7,77 @@
  *   Who has access: Anyone
  *   → Deploy → copy the /exec URL → put in VITE_GAS_ENDPOINT
  *
- * This script handles ALL Sheets writes from the React app.
- * No OAuth tokens needed — it runs as YOU (the sheet owner) server-side.
+ * The React app sends ALL writes as GET requests with query-string params.
+ * (POST is not used — GAS redirects POST requests which drops the body.)
  *
- * Actions supported (POST body JSON):
- *   { action: 'addBooking',        ...bookingFields }
- *   { action: 'addBookedSlot',     ...stationFields }
- *   { action: 'addUser',           ...userFields    }
- *   { action: 'updateStation',     rowIndex, ...stationData }
+ * Actions supported (via ?action=...&field=...):
+ *   addBooking       — append a booking row
+ *   addBookedSlot    — add a slot to a station (uses stationId, col A lookup)
+ *   removeBookedSlot — remove a slot from a station (admin delete flow)
+ *   addUser          — append a user row (deduped by UID)
+ *   updateStation    — update mutable cols D/E/F/G only (stationId lookup)
+ *   updateUserPhone  — update phone for existing user row
  *
- * The cleanup trigger (cleanupExpiredSlots) stays in gamezone_cleanup.gs
- * OR you can merge both into one file — both are shown below.
+ * LOCKED cols (updateStation NEVER touches these):
+ *   A = Station ID   B = Station Name   C = Type   H = Preferred Game
+ *
+ * The cleanup trigger (cleanupExpiredSlots) runs every 15 min via Apps Script trigger.
  */
+
 
 var STATION_SHEET  = 'Stations';
 var BOOKINGS_SHEET = 'Bookings';
 var USERS_SHEET    = 'Users';
 
+
 var BOOKINGS_HEADER = ['TXN ID','UID','Station','Slot','Hours','Amount (INR)','UPI ID','Bank','Status','Booked At'];
 var USERS_HEADER    = ['UID','Name','Email','Phone','Role','Joined At'];
 
-// ─── IST timestamp ────────────────────────────────────────────────────────────
+
+// ─── IST timestamp ─────────────────────────────────────────────────────────────
 function istNow() {
-  return Utilities.formatDate(
-    new Date(), 'Asia/Kolkata', 'dd/MM/yyyy HH:mm:ss'
-  );
+  return Utilities.formatDate(new Date(), 'Asia/Kolkata', 'dd/MM/yyyy HH:mm:ss');
 }
 
-// ─── HTTP entry point ─────────────────────────────────────────────────────────
-function doPost(e) {
+
+// ─── Find a station row by stationId (column A). Returns 1-based sheet row or -1. ──
+function findStationRow(sheet, stationId) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 3) return -1;                        // rows 1-2 are headers
+  var ids = sheet.getRange(3, 1, lastRow - 2, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]).trim() === String(stationId).trim()) {
+      return i + 3;                                  // 1-based sheet row
+    }
+  }
+  return -1;
+}
+
+
+// ─── HTTP entry point (GET) ────────────────────────────────────────────────────
+function doGet(e) {
+  // Health-check: no action param
+  if (!e || !e.parameter || !e.parameter.action) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'ok', service: 'GameZone Sheets API' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+
   try {
-    var body   = JSON.parse(e.postData.contents);
-    var action = body.action;
+    var p      = e.parameter;   // all query params are strings
+    var action = p.action;
     var result;
 
-    if      (action === 'addBooking')    result = addBooking(body);
-    else if (action === 'addBookedSlot') result = addBookedSlot(body);
-    else if (action === 'addUser')       result = addUser(body);
-    else if (action === 'updateStation') result = updateStation(body);
+
+    if      (action === 'addBooking')       result = addBooking(p);
+    else if (action === 'addBookedSlot')    result = addBookedSlot(p);
+    else if (action === 'removeBookedSlot') result = removeBookedSlot(p);
+    else if (action === 'addUser')          result = addUser(p);
+    else if (action === 'updateStation')    result = updateStation(p);
+    else if (action === 'updateUserPhone')  result = updateUserPhone(p);
     else throw new Error('Unknown action: ' + action);
+
 
     return ok(result);
   } catch (err) {
@@ -53,14 +85,14 @@ function doPost(e) {
   }
 }
 
-// GET for health-check / CORS preflight
-function doGet() {
-  return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', service: 'GameZone Sheets API' }))
-    .setMimeType(ContentService.MimeType.JSON);
+
+// Keep doPost as a no-op redirect to doGet for safety
+function doPost(e) {
+  return doGet(e);
 }
 
-// ─── Response helpers ─────────────────────────────────────────────────────────
+
+// ─── Response helpers ──────────────────────────────────────────────────────────
 function ok(data) {
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true, data: data || null }))
@@ -72,7 +104,8 @@ function error(msg) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ─── Ensure header row exists ─────────────────────────────────────────────────
+
+// ─── Ensure header row exists ──────────────────────────────────────────────────
 function ensureHeader(sheet, header) {
   var first = sheet.getRange(1, 1).getValue();
   if (String(first).trim() !== header[0]) {
@@ -80,97 +113,180 @@ function ensureHeader(sheet, header) {
   }
 }
 
-// ─── Action: append booking row ───────────────────────────────────────────────
-function addBooking(b) {
+
+// ─── Action: append booking row ────────────────────────────────────────────────
+function addBooking(p) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(BOOKINGS_SHEET);
   if (!sheet) sheet = ss.insertSheet(BOOKINGS_SHEET);
   ensureHeader(sheet, BOOKINGS_HEADER);
   sheet.appendRow([
-    b.txnId, b.uid, b.stationName, b.slot, b.hours,
-    b.amount, b.upiId, b.bank, b.status, istNow()
+    p.txnId, p.uid, p.stationName, p.slot,
+    p.hours, p.amount, p.upiId, p.bank, p.status, istNow()
   ]);
-  return { txnId: b.txnId };
+  return { txnId: p.txnId };
 }
 
-// ─── Action: add booked slot to station row (on booking, keeps status available) ──
-function addBookedSlot(b) {
+
+// ─── Action: add a booked slot to a station (col A lookup, only writes col F) ─
+function addBookedSlot(p) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
-  // Find Stations sheet (first sheet or by name)
   var sheet = ss.getSheetByName(STATION_SHEET) || ss.getSheets()[0];
 
-  var rowIndex = Number(b.stationIndex); // 0-based data index
-  if (isNaN(rowIndex) || rowIndex < 0) throw new Error('Invalid stationIndex');
 
-  var sheetRow = rowIndex + 2; // +1 header +1 for 1-based
-  var range    = sheet.getRange(sheetRow, 1, 1, 8); // A:H
-  var values   = range.getValues()[0];
+  var row = findStationRow(sheet, p.stationId);
+  if (row === -1) throw new Error('Station not found: ' + p.stationId);
 
-  // Column F (index 5) = Booked Slots
-  var bookedRaw  = String(values[5] || '').trim();
-  var existing   = bookedRaw ? bookedRaw.split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
-  var newSlot    = String(b.slot || '').trim();
 
-  // Add new slot if not duplicate
+  // Read existing booked slots (col F = column 6)
+  var bookedRaw = String(sheet.getRange(row, 6).getValue() || '').trim();
+  var existing  = bookedRaw
+    ? bookedRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean)
+    : [];
+
+
+  var newSlot = String(p.slot || '').trim();
   if (newSlot && existing.indexOf(newSlot) === -1) {
     existing.push(newSlot);
   }
 
-  // Write back: only update Booked Slots (F=col6), leave everything else as-is
-  sheet.getRange(sheetRow, 6).setValue(existing.join(', '));
-  return { stationName: b.stationName, bookedSlots: existing };
+
+  // Only write col F — leave A, B, C, D, E, G, H untouched
+  sheet.getRange(row, 6).setValue(existing.join(', '));
+  return { stationId: p.stationId, bookedSlots: existing };
 }
 
-// ─── Action: append user row ──────────────────────────────────────────────────
+
+// ─── Action: remove a single booked slot from a station (admin booking delete) ─
+//
+// Called when an admin deletes a booking from the dashboard.
+// Splices the exact slot string out of col F (Booked Slots).
+// Also clears Active Slot (col E) and resets Status (col D) to 'available'
+// if the deleted slot is the one currently active.
+//
+function removeBookedSlot(p) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(STATION_SHEET) || ss.getSheets()[0];
+
+  var sid  = String(p.stationId || '').trim();
+  var slot = String(p.slot      || '').trim();
+  if (!sid || !slot) throw new Error('removeBookedSlot requires stationId and slot');
+
+  var row = findStationRow(sheet, sid);
+  if (row === -1) throw new Error('Station not found: ' + sid);
+
+  // Read cols D(4), E(5), F(6)
+  var rowData    = sheet.getRange(row, 4, 1, 3).getValues()[0];
+  var status     = String(rowData[0] || '').trim();
+  var activeSlot = String(rowData[1] || '').trim();
+  var bookedRaw  = String(rowData[2] || '').trim();
+
+  // Remove the slot from Booked Slots (col F)
+  var remaining = bookedRaw
+    .split(',')
+    .map(function(s) { return s.trim(); })
+    .filter(function(s) { return s && s !== slot; });
+  sheet.getRange(row, 6).setValue(remaining.join(', '));
+
+  // If the deleted slot is the currently active one, clear it and reset status
+  if (activeSlot === slot) {
+    sheet.getRange(row, 4).setValue('available');  // D = Status
+    sheet.getRange(row, 5).setValue('');           // E = Active Slot
+    sheet.getRange(row, 7).setValue('');           // G = Current Game
+    Logger.log('removeBookedSlot: cleared active slot ' + slot + ' on station ' + sid);
+  }
+
+  return { stationId: sid, removed: slot, remaining: remaining };
+}
+
+
+// ─── Action: append user row (deduped by UID) ──────────────────────────────────
 function addUser(u) {
   var ss    = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(USERS_SHEET);
   if (!sheet) sheet = ss.insertSheet(USERS_SHEET);
   ensureHeader(sheet, USERS_HEADER);
 
-  // Avoid duplicate UIDs
-  var data  = sheet.getDataRange().getValues();
+
+  // Check for duplicate UID
+  var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === String(u.uid).trim()) {
       return { uid: u.uid, skipped: true };
     }
   }
+
+
   sheet.appendRow([u.uid, u.name, u.email, u.phone || '', u.role || 'member', istNow()]);
   return { uid: u.uid };
 }
 
-// ─── Action: admin explicit station save (from AdminDashboard) ────────────────
-function updateStation(b) {
-  var ss       = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet    = ss.getSheetByName(STATION_SHEET) || ss.getSheets()[0];
-  var rowIndex = Number(b.rowIndex);
-  if (isNaN(rowIndex) || rowIndex < 0) throw new Error('Invalid rowIndex');
 
-  var sheetRow = rowIndex + 2;
-  var bookedSlots = Array.isArray(b.bookedSlots) ? b.bookedSlots.join(', ') : (b.bookedSlots || '');
-  var activeSlot  = b.activeSlot || '';
-  if (activeSlot && typeof activeSlot === 'object') {
-    activeSlot = (activeSlot.start24 || '') + '-' + (activeSlot.end24 || '');
-  }
+// ─── Action: update mutable station columns only (D, E, F, G) ─────────────────
+//
+// LOCKED — this function NEVER writes:
+//   col A = Station ID      col B = Station Name
+//   col C = Type            col H = Preferred Game
+//
+// Only written:
+//   col D = Status          col E = Active Slot
+//   col F = Booked Slots    col G = Current Game
+//
+function updateStation(p) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(STATION_SHEET) || ss.getSheets()[0];
 
-  sheet.getRange(sheetRow, 1, 1, 8).setValues([[
-    b.id            || '',
-    b.stationName   || '',
-    b.stationType   || 'ps5',
-    b.status        || 'available',
-    activeSlot,
-    bookedSlots,
-    b.currentGame   || '',
-    b.preferredGame || '',
-  ]]);
-  return { rowIndex: rowIndex };
+
+  var row = findStationRow(sheet, p.stationId);
+  if (row === -1) throw new Error('Station not found: ' + p.stationId);
+
+
+  // Normalise bookedSlots — client sends comma-joined string (from URLSearchParams)
+  var bookedSlots = String(p.bookedSlots || '')
+    .split(',')
+    .map(function(s) { return s.trim(); })
+    .filter(Boolean)
+    .join(', ');
+
+
+  var activeSlot = String(p.activeSlot || '').trim();
+
+
+  // Write ONLY cols D(4), E(5), F(6), G(7) — A, B, C, H are untouched
+  sheet.getRange(row, 4).setValue(p.status        || 'available');  // D
+  sheet.getRange(row, 5).setValue(activeSlot);                       // E
+  sheet.getRange(row, 6).setValue(bookedSlots);                      // F
+  sheet.getRange(row, 7).setValue(p.currentGame   || '');           // G
+
+
+  return { stationId: p.stationId, row: row };
 }
 
 
+// ─── Action: update user phone number ─────────────────────────────────────────
+function updateUserPhone(p) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(USERS_SHEET);
+  if (!sheet) throw new Error('Users sheet not found');
+
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === String(p.uid).trim()) {
+      sheet.getRange(i + 1, 4).setValue(p.phone || '');  // col D = Phone
+      return { uid: p.uid, updated: true };
+    }
+  }
+  throw new Error('User not found: ' + p.uid);
+}
+
+
+
 // =============================================================================
-// CLEANUP TRIGGER (can keep this here OR in gamezone_cleanup.gs — not both)
-// Set trigger: cleanupExpiredSlots -> Time-driven -> Every 15 minutes
+// CLEANUP TRIGGER
+// Set: cleanupExpiredSlots → Time-driven → Every 15 minutes
 // =============================================================================
+
 
 function toMinutes(timeStr) {
   var parts = String(timeStr || '').trim().split(':');
@@ -178,12 +294,13 @@ function toMinutes(timeStr) {
   return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
+
 function nowIST() {
-  var now   = new Date();
-  var istMs = now.getTime() + (5.5 * 60 * 60 * 1000);
+  var istMs = new Date().getTime() + (5.5 * 60 * 60 * 1000);
   var ist   = new Date(istMs);
   return ist.getUTCHours() * 60 + ist.getUTCMinutes();
 }
+
 
 function parseSlot(slotStr) {
   var m = String(slotStr || '').trim().match(/^(\d{1,2}:\d{2})-(\d{1,2}:\d{2})$/);
@@ -191,42 +308,51 @@ function parseSlot(slotStr) {
   return { start: toMinutes(m[1]), end: toMinutes(m[2]), raw: slotStr.trim() };
 }
 
+
 function cleanupExpiredSlots() {
   var ss      = SpreadsheetApp.getActiveSpreadsheet();
   var sheet   = ss.getSheetByName(STATION_SHEET) || ss.getSheets()[0];
   var lastRow = sheet.getLastRow();
-  if (lastRow < 2) return;
+  if (lastRow < 3) return;   // nothing beyond headers
 
-  var startRow = 2;
-  var dataRows = lastRow - 1;
-  var range    = sheet.getRange(startRow, 1, dataRows, 8);
-  var values   = range.getValues();
-  var now      = nowIST();
-  var changed  = false;
+
+  // Data starts at row 3 (rows 1-2 are headers)
+  var startRow = 3;
+  var dataRows = lastRow - 2;
+  // Read cols D(4)–G(7) only — never read/write A, B, C, H
+  var range  = sheet.getRange(startRow, 4, dataRows, 4);  // D:G
+  var values = range.getValues();
+  var now     = nowIST();
+  var changed = false;
+
 
   for (var i = 0; i < values.length; i++) {
-    var activeSlot  = String(values[i][4] || '').trim();
-    var bookedRaw   = String(values[i][5] || '').trim();
+    // values[i]: [0]=Status, [1]=Active Slot, [2]=Booked Slots, [3]=Current Game
+    var activeSlot  = String(values[i][1] || '').trim();
+    var bookedRaw   = String(values[i][2] || '').trim();
     var bookedSlots = bookedRaw
-      ? bookedRaw.split(',').map(function(s){return s.trim();}).filter(Boolean)
+      ? bookedRaw.split(',').map(function(s) { return s.trim(); }).filter(Boolean)
       : [];
+
 
     // Step 1: if active slot has ended, clear it
     if (activeSlot) {
       var active = parseSlot(activeSlot);
       if (active && now >= active.end) {
-        values[i][3] = 'available';
-        values[i][4] = '';
-        values[i][6] = '';
+        values[i][0] = 'available';  // Status
+        values[i][1] = '';           // Active Slot
+        values[i][3] = '';           // Current Game
         activeSlot   = '';
         changed      = true;
-        Logger.log('Row '+(startRow+i)+': ended -> available ('+active.raw+')');
+        Logger.log('Row ' + (startRow + i) + ': ended → available (' + active.raw + ')');
       }
     }
 
-    // Step 2: promote earliest booked slot that has started
+
+    // Step 2: promote earliest booked slot that has started; discard expired ones
     var parsed = bookedSlots.map(parseSlot).filter(Boolean);
-    parsed.sort(function(a,b){return a.start-b.start;});
+    parsed.sort(function(a, b) { return a.start - b.start; });
+
 
     var promoted  = null;
     var remaining = [];
@@ -234,27 +360,29 @@ function cleanupExpiredSlots() {
       var sl = parsed[j];
       if (!promoted && now >= sl.start && now < sl.end) {
         promoted = sl;
-      } else if (now >= sl.end) {
-        changed = true; // discard expired
+      } else if (now < sl.end) {
+        remaining.push(sl.raw);   // future slot — keep
       } else {
-        remaining.push(sl.raw);
+        changed = true;           // expired slot — discard
       }
     }
 
+
     if (promoted) {
-      values[i][3] = 'occupied';
-      values[i][4] = promoted.raw;
-      values[i][5] = remaining.join(', ');
-      changed      = true;
-      Logger.log('Row '+(startRow+i)+': started -> occupied ('+promoted.raw+')');
+      values[i][0] = 'occupied';          // Status
+      values[i][1] = promoted.raw;        // Active Slot
+      values[i][2] = remaining.join(', ');// Booked Slots (remaining)
+      changed = true;
+      Logger.log('Row ' + (startRow + i) + ': started → occupied (' + promoted.raw + ')');
     } else if (remaining.length !== bookedSlots.length) {
-      values[i][5] = remaining.join(', ');
-      changed      = true;
+      values[i][2] = remaining.join(', ');
+      changed = true;
     }
   }
 
+
   if (changed) {
     range.setValues(values);
-    Logger.log('Saved at ' + new Date().toISOString());
+    Logger.log('cleanupExpiredSlots saved at ' + new Date().toISOString());
   }
 }
