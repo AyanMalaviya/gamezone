@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UserCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
@@ -10,7 +10,6 @@ const PUBLIC_NAV = [
   { label: 'Pricing',  href: '/pricing' },
 ];
 
-/** GameZone inline SVG logo — no external file, works everywhere */
 const GameZoneLogo = ({ size = 36 }) => (
   <svg
     width={size} height={size} viewBox="0 0 48 48"
@@ -36,59 +35,78 @@ const GameZoneLogo = ({ size = 36 }) => (
         <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
       </filter>
     </defs>
-
-    {/* Background circle */}
     <circle cx="24" cy="24" r="23" fill="url(#gz-bg)" />
-
-    {/* Outer ring */}
     <circle cx="24" cy="24" r="22" stroke="url(#gz-ring)" strokeWidth="1.5" fill="none" />
-
-    {/* Controller body */}
     <rect x="10" y="18" width="28" height="16" rx="7" fill="url(#gz-btn)" filter="url(#gz-glow)" />
-
-    {/* D-pad left side — cross */}
     <rect x="14" y="23" width="6" height="2" rx="1" fill="#fff" opacity="0.9" />
     <rect x="16" y="21" width="2" height="6" rx="1" fill="#fff" opacity="0.9" />
-
-    {/* Action buttons right side — circles */}
     <circle cx="33" cy="23" r="1.4" fill="#f9a8d4" opacity="0.95" />
     <circle cx="36" cy="26" r="1.4" fill="#86efac" opacity="0.95" />
     <circle cx="30" cy="26" r="1.4" fill="#fde68a" opacity="0.95" />
     <circle cx="33" cy="29" r="1.4" fill="#93c5fd" opacity="0.95" />
-
-    {/* Center home button */}
     <circle cx="24" cy="26" r="2.2" fill="#fff" opacity="0.15" />
     <circle cx="24" cy="26" r="1.2" fill="#c4b5fd" opacity="0.9" />
-
-    {/* Cable bumps top */}
     <path d="M19 18 Q20 14 24 14 Q28 14 29 18" stroke="#a855f7" strokeWidth="1.2" fill="none" opacity="0.6" />
-
-    {/* Grip accent lines bottom */}
     <path d="M15 31 Q17 34 20 33" stroke="#c084fc" strokeWidth="0.8" fill="none" opacity="0.5" />
     <path d="M33 31 Q31 34 28 33" stroke="#c084fc" strokeWidth="0.8" fill="none" opacity="0.5" />
-
-    {/* Glow dot top-right */}
     <circle cx="37" cy="13" r="2" fill="#a855f7" opacity="0.5" />
     <circle cx="37" cy="13" r="1" fill="#e879f9" opacity="0.9" />
   </svg>
 );
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobile] = useState(false);
-  const location  = useLocation();
-  const navigate  = useNavigate();
+  const [scrolled,    setScrolled]    = useState(false);
+  const [navHidden,   setNavHidden]   = useState(false);
+  const [mobileOpen,  setMobile]      = useState(false);
+  const lastScrollY   = useRef(0);
+  const ticking       = useRef(false);
+  const location      = useLocation();
+  const navigate      = useNavigate();
   const { user, role, phone, logout } = useAuthStore();
-
   const isAdmin = role === 'admin';
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 30);
+    const HIDE_THRESHOLD   = 80;  // px scrolled before hide kicks in
+    const SCROLL_DELTA     = 6;   // px delta needed to trigger hide/show
+
+    const onScroll = () => {
+      if (ticking.current) return;
+      ticking.current = true;
+
+      requestAnimationFrame(() => {
+        const y     = window.scrollY;
+        const delta = y - lastScrollY.current;
+
+        // Scrolled enough to blur background
+        setScrolled(y > 30);
+
+        // Hide on scroll-down, show on scroll-up
+        if (y > HIDE_THRESHOLD) {
+          if (delta > SCROLL_DELTA) {
+            setNavHidden(true);      // scrolling down → hide
+          } else if (delta < -SCROLL_DELTA) {
+            setNavHidden(false);     // scrolling up → show
+          }
+        } else {
+          setNavHidden(false);       // near top → always show
+        }
+
+        lastScrollY.current = y;
+        ticking.current = false;
+      });
+    };
+
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Close mobile drawer on route change
   useEffect(() => { setMobile(false); }, [location.pathname]);
+
+  // Show navbar when mobile menu is open (prevent it from hiding while interacting)
+  useEffect(() => {
+    if (mobileOpen) setNavHidden(false);
+  }, [mobileOpen]);
 
   const isActive = (href) =>
     href === '/' ? location.pathname === '/' : location.pathname.startsWith(href);
@@ -100,14 +118,24 @@ export default function Navbar() {
     navigate(`/${ADMIN_PATH}`);
   };
 
+  const navClass = [
+    'navbar-root',
+    scrolled  ? 'navbar-scrolled' : '',
+    navHidden ? 'navbar-hidden'   : '',
+  ].filter(Boolean).join(' ');
+
+  const borderClass = [
+    'navbar-border-light',
+    navHidden ? 'navbar-hidden-border' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <>
-      <div className="navbar-border-light" />
-      <header className={`navbar-root${scrolled ? ' navbar-scrolled' : ''}`} role="banner">
+      <div className={borderClass} />
+      <header className={navClass} role="banner">
         <div className="navbar-scan" />
         <div className="navbar-inner">
 
-          {/* Logo — inline SVG, zero network request, works on Vercel */}
           <Link to="/" className="navbar-logo" aria-label="GameZone home">
             <GameZoneLogo size={36} />
             <span className="navbar-logo-text">
@@ -115,7 +143,6 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Desktop nav */}
           <nav className="navbar-links" aria-label="Primary navigation">
             {PUBLIC_NAV.map(link => (
               <Link key={link.label} to={link.href}
@@ -133,7 +160,6 @@ export default function Navbar() {
             )}
           </nav>
 
-          {/* Auth buttons */}
           <div className="navbar-auth">
             {user ? (
               <>
@@ -179,7 +205,6 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Hamburger */}
           <button className="navbar-hamburger" onClick={() => setMobile(v => !v)}
             aria-expanded={mobileOpen} aria-label="Toggle navigation">
             <span className={`ham-line${mobileOpen ? ' ham-open-1' : ''}`} />
@@ -189,7 +214,6 @@ export default function Navbar() {
         </div>
       </header>
 
-      {/* Mobile drawer */}
       <div className={`mobile-drawer${mobileOpen ? ' drawer-open' : ''}`} aria-hidden={!mobileOpen}>
         <div className="mobile-drawer-inner">
           {PUBLIC_NAV.map(link => (
