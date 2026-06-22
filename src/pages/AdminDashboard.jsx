@@ -3,12 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import {
   LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star,
   RefreshCw, CheckCircle2, AlertTriangle, Users, Plus,
-  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff, Lock,
+  Trash2, ChevronDown, ChevronUp, Shield, ShieldOff,
   BookOpen, Pencil, X as XIcon,
 } from 'lucide-react';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import useStationData from '../hooks/useStationData';
-import { gasUpdateStation } from '../lib/gasClient';
+import { useStations } from '../hooks/useStations';
 import { auth, adminGoogleProvider } from '../lib/firebase';
 import { listAllUsers, updateUserProfile, setUserRole } from '../hooks/useUsers';
 import { useAllBookings } from '../hooks/useBookings';
@@ -94,23 +94,14 @@ const LoginPage = ({ onLogin, busy, error }) => (
   </div>
 );
 
-// ─── LockedCell ──────────────────────────────────────────────────────────────────────
-const LockedCell = ({ value, title }) => (
-  <span
-    title={title ?? 'Locked — edit directly in Google Sheets'}
-    style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      fontSize: '0.8rem', color: 'rgba(255,255,255,0.4)',
-      fontWeight: 600, userSelect: 'none', cursor: 'default',
-    }}
-  >
-    {value || '—'}
-    <Lock size={10} color="rgba(255,255,255,0.18)" />
-  </span>
-);
+const inputStyle = {
+  width: '100%', padding: '8px 10px', borderRadius: 7,
+  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+  color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
+};
 
-// ─── StationRow ───────────────────────────────────────────────────────────────────────
-const StationRow = ({ station }) => {
+// ── StationRow ────────────────────────────────────────────────────────────────────
+const StationRow = ({ station, onUpdate, onDelete }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
     if (typeof slot === 'string') return slot;
@@ -119,31 +110,31 @@ const StationRow = ({ station }) => {
   };
 
   const init = () => ({
-    status:      station.status      || 'available',
-    activeSlot:  serSlot(station.activeSlot),
-    bookedSlots: Array.isArray(station.bookedSlots)
-                   ? station.bookedSlots.join(', ')
-                   : (station.bookedSlots || ''),
-    currentGame: station.currentGame || '',
+    name:          station.name          || station.stationName || '',
+    type:          station.type          || station.stationType || 'ps5',
+    preferredGame: station.preferredGame || '',
+    currentGame:   station.currentGame   || '',
   });
 
   const [form, setForm]     = useState(init);
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [err,    setErr]    = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
 
-  useEffect(() => { setForm(init()); }, [station]); // eslint-disable-line
+  useEffect(() => { setForm(init()); }, [station.id]); // eslint-disable-line
 
   const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
 
   const onSave = async () => {
     setSaving(true); setErr(null);
     try {
-      await gasUpdateStation(station.id, {
-        status:      form.status,
-        activeSlot:  form.activeSlot || '',
-        bookedSlots: form.bookedSlots.split(',').map(s => s.trim()).filter(Boolean),
-        currentGame: form.currentGame,
+      await onUpdate(station.id, {
+        name:          form.name,
+        type:          form.type,
+        preferredGame: form.preferredGame,
+        currentGame:   form.currentGame,
       });
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -151,8 +142,19 @@ const StationRow = ({ station }) => {
     } finally { setSaving(false); }
   };
 
-  const occupied  = form.status?.toLowerCase() === 'occupied';
-  const typeLabel = station.stationType === 'racing' ? '🏎️' : '🎮';
+  const handleDelete = async () => {
+    if (!confirmDel) { setConfirmDel(true); setTimeout(() => setConfirmDel(false), 3000); return; }
+    setDeleting(true);
+    try { await onDelete(station.id); }
+    finally { setDeleting(false); }
+  };
+
+  const occupied  = station.status === 'occupied';
+  const typeLabel = (form.type || station.stationType) === 'racing' ? '🏀️' : '🎮';
+  const activeSlotStr = serSlot(station.activeSlot);
+  const bookedStr = Array.isArray(station.bookedSlots)
+    ? station.bookedSlots.join(', ')
+    : (station.bookedSlots || '');
 
   return (
     <tr className={`sr ${occupied ? 'sr-occ' : 'sr-avail'}`}>
@@ -162,56 +164,161 @@ const StationRow = ({ station }) => {
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
-      <td className="td-i" style={{ minWidth: 130 }}>
-        <LockedCell value={station.stationName} title="Station Name is locked" />
+
+      {/* Editable: Name */}
+      <td className="td-i" style={{ minWidth: 150 }}>
+        <input type="text" name="name" value={form.name} onChange={onChange}
+          placeholder="Station Name" className="ni" style={{ width: '100%' }} />
       </td>
+
+      {/* Editable: Type */}
       <td className="td-i">
-        <LockedCell value={station.stationType?.toUpperCase()} title="Type is locked" />
-      </td>
-      <td className="td-s">
-        <select name="status" value={form.status} onChange={onChange}
-          className={`sel ${occupied ? 'sel-occ' : 'sel-avail'}`}>
-          <option value="available">Available</option>
-          <option value="occupied">Occupied</option>
+        <select name="type" value={form.type} onChange={onChange}
+          className="sel" style={{ minWidth: 90 }}>
+          <option value="ps5">PS5</option>
+          <option value="racing">Racing</option>
+          <option value="pc">PC</option>
+          <option value="vr">VR</option>
         </select>
       </td>
+
+      {/* Read-only derived: Status */}
       <td className="td-i">
-        <input type="text" name="activeSlot" value={form.activeSlot} onChange={onChange}
-          placeholder="14:00-15:00" className="ni" style={{ width: 110 }} />
+        <span style={{
+          fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px',
+          borderRadius: 99,
+          background: occupied ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)',
+          border: `1px solid ${occupied ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}`,
+          color: occupied ? '#f87171' : '#4ade80',
+        }}>{occupied ? 'OCCUPIED' : 'AVAILABLE'}</span>
       </td>
+
+      {/* Read-only derived: Active Slot */}
+      <td className="td-i">
+        <span style={{ fontSize: '0.8rem', color: activeSlotStr ? '#fbbf24' : 'rgba(255,255,255,0.25)', fontWeight: 600 }}>
+          {activeSlotStr || '—'}
+        </span>
+      </td>
+
+      {/* Read-only derived: Booked Slots */}
       <td className="td-i td-w">
-        <input type="text" name="bookedSlots" value={form.bookedSlots} onChange={onChange}
-          placeholder="10:00-11:00, 13:00-14:00" className="ni" />
+        <span style={{ fontSize: '0.75rem', color: bookedStr ? '#a78bfa' : 'rgba(255,255,255,0.25)' }}>
+          {bookedStr || '—'}
+        </span>
       </td>
+
+      {/* Editable: Current Game */}
       <td className="td-i">
         <input type="text" name="currentGame" value={form.currentGame} onChange={onChange}
           placeholder="e.g. FC 25" className="ni" />
       </td>
+
+      {/* Editable: Preferred Game */}
       <td className="td-i">
-        <LockedCell value={station.preferredGame} title="Preferred Game is locked" />
+        <input type="text" name="preferredGame" value={form.preferredGame} onChange={onChange}
+          placeholder="e.g. GTA V" className="ni" />
       </td>
+
       <td className="td-sv">
         {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>⚠ {err}</p>}
-        <button onClick={onSave} disabled={saving}
-          className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
-          {saving ? <Loader2 size={13} className="adm-spin" />
-            : saved  ? <CheckCircle2 size={13} />
-            : err    ? <AlertTriangle size={13} />
-            : <Save size={13} />}
-          <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onSave} disabled={saving}
+            className={`sv-btn ${saved ? 'sv-ok' : err ? 'sv-err' : ''}`}>
+            {saving ? <Loader2 size={13} className="adm-spin" />
+              : saved  ? <CheckCircle2 size={13} />
+              : err    ? <AlertTriangle size={13} />
+              : <Save size={13} />}
+            <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
+          </button>
+          <button onClick={handleDelete} disabled={deleting} title={confirmDel ? 'Click again to confirm' : 'Delete station'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '5px 10px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600,
+              background: confirmDel ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.08)',
+              border: `1px solid ${confirmDel ? 'rgba(239,68,68,0.6)' : 'rgba(239,68,68,0.2)'}`,
+              color: '#f87171', cursor: 'pointer', transition: 'all .15s',
+            }}>
+            {deleting ? <Loader2 size={12} className="adm-spin" /> : <Trash2 size={12} />}
+            {confirmDel ? 'Confirm' : 'Delete'}
+          </button>
+        </div>
       </td>
     </tr>
   );
 };
 
-const inputStyle = {
-  width: '100%', padding: '8px 10px', borderRadius: 7,
-  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-  color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
+// ── AddStationForm ─────────────────────────────────────────────────────────────
+const AddStationForm = ({ onAdd }) => {
+  const [open, setOpen]     = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm]     = useState({ name: '', type: 'ps5', preferredGame: '' });
+  const onChange = e => setForm(p => ({ ...p, [e.target.name]: e.target.value }));
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) return;
+    setSaving(true);
+    try {
+      await onAdd(form);
+      setForm({ name: '', type: 'ps5', preferredGame: '' });
+      setOpen(false);
+    } finally { setSaving(false); }
+  };
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)} style={{
+      display: 'flex', alignItems: 'center', gap: 7,
+      padding: '8px 16px', borderRadius: 9, marginBottom: 14,
+      background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)',
+      color: '#4ade80', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
+    }}><Plus size={14} /> Add Station</button>
+  );
+
+  return (
+    <div style={{
+      marginBottom: 16, padding: '14px 16px', borderRadius: 12,
+      background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)',
+    }}>
+      <p style={{ fontSize: '0.7rem', color: '#4ade80', letterSpacing: '0.1em', marginBottom: 12, fontWeight: 700 }}>NEW STATION</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: 10 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>STATION NAME *</label>
+          <input name="name" value={form.name} onChange={onChange} placeholder="e.g. PS5 Station 15" style={inputStyle} />
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>TYPE</label>
+          <select name="type" value={form.type} onChange={onChange} style={{ ...inputStyle, cursor: 'pointer' }}>
+            <option value="ps5">PS5</option>
+            <option value="racing">Racing</option>
+            <option value="pc">PC</option>
+            <option value="vr">VR</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>PREFERRED GAME</label>
+          <input name="preferredGame" value={form.preferredGame} onChange={onChange} placeholder="e.g. GTA V" style={inputStyle} />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button onClick={handleAdd} disabled={saving || !form.name.trim()} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '8px 16px', borderRadius: 8,
+          background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)',
+          color: '#4ade80', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer',
+        }}>
+          {saving ? <Loader2 size={13} className="adm-spin" /> : <Plus size={13} />}
+          {saving ? 'Adding…' : 'Add Station'}
+        </button>
+        <button onClick={() => setOpen(false)} style={{
+          padding: '8px 14px', borderRadius: 8,
+          background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+          color: 'rgba(255,255,255,0.4)', fontSize: '0.82rem', cursor: 'pointer',
+        }}>Cancel</button>
+      </div>
+    </div>
+  );
 };
 
-// ─── BookingRow ───────────────────────────────────────────────────────────────────────
+// ── STATUS_COLORS / BookingRow / UserRow unchanged ───────────────────────────
 const STATUS_COLORS = {
   confirmed: { color: '#4ade80', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.25)'  },
   cancelled: { color: '#f87171', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.25)'  },
@@ -249,64 +356,30 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
   };
 
   return (
-    <div style={{
-      borderRadius: 10, marginBottom: 8,
-      background: 'rgba(255,255,255,0.03)',
-      border: '1px solid rgba(255,255,255,0.07)',
-      overflow: 'hidden',
-    }}>
-      {/* Summary row */}
+    <div style={{ borderRadius: 10, marginBottom: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
-        <span style={{
-          fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em',
-          padding: '2px 8px', borderRadius: 99,
-          background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color,
-          flexShrink: 0,
-        }}>{(form.status || 'pending').toUpperCase()}</span>
-
+        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 99, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color, flexShrink: 0 }}>{(form.status || 'pending').toUpperCase()}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {booking.stationName || '—'}
-          </div>
-          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>
-            {booking.slot || '—'} · {booking.hours || 1}h · ₹{booking.amount}
-          </div>
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{booking.stationName || '—'}</div>
+          <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{booking.slot || '—'} · {booking.hours || 1}h · ₹{booking.amount}</div>
         </div>
-
         <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', flexShrink: 0, textAlign: 'right' }}>
           <div style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)' }}>{booking.txnId}</div>
           <div>{fmtDate(booking.bookedAt)}</div>
         </div>
-
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => setEditing(e => !e)} style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: editing ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.06)',
-            border: `1px solid ${editing ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.1)'}`,
-            color: editing ? '#a78bfa' : 'rgba(255,255,255,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-          }}>{editing ? <XIcon size={12} /> : <Pencil size={12} />}</button>
-
-          <button onClick={handleDelete} disabled={deleting} style={{
-            width: 28, height: 28, borderRadius: 7,
-            background: confirmDel ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.08)',
-            border: `1px solid ${confirmDel ? 'rgba(239,68,68,0.6)' : 'rgba(239,68,68,0.2)'}`,
-            color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            transition: 'all .15s',
-          }}>
+          <button onClick={() => setEditing(e => !e)} style={{ width: 28, height: 28, borderRadius: 7, background: editing ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${editing ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.1)'}`, color: editing ? '#a78bfa' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{editing ? <XIcon size={12} /> : <Pencil size={12} />}</button>
+          <button onClick={handleDelete} disabled={deleting} style={{ width: 28, height: 28, borderRadius: 7, background: confirmDel ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.08)', border: `1px solid ${confirmDel ? 'rgba(239,68,68,0.6)' : 'rgba(239,68,68,0.2)'}`, color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .15s' }}>
             {deleting ? <Loader2 size={12} className="adm-spin" /> : <Trash2 size={12} />}
           </button>
         </div>
       </div>
-
-      {/* Edit panel */}
       {editing && (
         <div style={{ padding: '0 14px 14px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, marginTop: 12 }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>STATUS</label>
-              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
-                style={{ ...inputStyle, cursor: 'pointer' }}>
+              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
                 <option value="confirmed">Confirmed</option>
                 <option value="cancelled">Cancelled</option>
                 <option value="pending">Pending</option>
@@ -314,36 +387,21 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>SLOT</label>
-              <input value={form.slot} onChange={e => setForm(p => ({ ...p, slot: e.target.value }))}
-                placeholder="14:00-15:00" style={inputStyle} />
+              <input value={form.slot} onChange={e => setForm(p => ({ ...p, slot: e.target.value }))} placeholder="14:00-15:00" style={inputStyle} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>GAME</label>
-              <input value={form.game} onChange={e => setForm(p => ({ ...p, game: e.target.value }))}
-                placeholder="e.g. FC 25" style={inputStyle} />
+              <input value={form.game} onChange={e => setForm(p => ({ ...p, game: e.target.value }))} placeholder="e.g. FC 25" style={inputStyle} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={handleSave} disabled={saving} style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '7px 14px', borderRadius: 8,
-              background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.4)',
-              color: '#a78bfa', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-            }}>
+            <button onClick={handleSave} disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: 'rgba(124,58,237,0.2)', border: '1px solid rgba(124,58,237,0.4)', color: '#a78bfa', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
               {saving ? <Loader2 size={12} className="adm-spin" /> : <Save size={12} />}
               {saving ? 'Saving…' : 'Save'}
             </button>
-            <button onClick={() => setEditing(false)} style={{
-              padding: '7px 14px', borderRadius: 8,
-              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-              color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem', cursor: 'pointer',
-            }}>Cancel</button>
+            <button onClick={() => setEditing(false)} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)', fontSize: '0.78rem', cursor: 'pointer' }}>Cancel</button>
           </div>
-          {confirmDel && (
-            <p style={{ marginTop: 8, fontSize: '0.7rem', color: '#f87171' }}>
-              ⚠ Click delete again to confirm permanent deletion.
-            </p>
-          )}
+          {confirmDel && <p style={{ marginTop: 8, fontSize: '0.7rem', color: '#f87171' }}>⚠ Click delete again to confirm permanent deletion.</p>}
         </div>
       )}
     </div>
@@ -454,6 +512,7 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
   );
 };
 
+// ── AdminDashboard ─────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [adminUser,  setAdminUser]  = useState(null);
   const [loginBusy,  setLoginBusy]  = useState(false);
@@ -465,7 +524,8 @@ export default function AdminDashboard() {
   const [usersLoad, setUsersLoad] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
 
-  const { stations, isLoading, isError, refetch } = useStationData();
+  const { stations, isLoading, isError } = useStationData();
+  const { addStation, updateStation, deleteStation } = useStations();
   const { bookings, loading: bookingsLoad, updateBooking, deleteBooking } = useAllBookings();
   const navigate = useNavigate();
   const zapRef   = useRef(null);
@@ -503,170 +563,4 @@ export default function AdminDashboard() {
     navigate('/', { replace: true });
   };
 
-  const handleLogin = async () => {
-    setLoginBusy(true); setLoginError(null);
-    try {
-      const result  = await signInWithPopup(auth, adminGoogleProvider);
-      const userObj = { uid: result.user.uid, email: result.user.email, displayName: result.user.displayName, photoURL: result.user.photoURL };
-      sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(userObj));
-      setAdminUser(userObj);
-    } catch (e) {
-      setLoginError(e.message || 'Sign-in failed. Try again.');
-    } finally { setLoginBusy(false); }
-  };
-
-  const handleUserUpdate   = useCallback(async (uid, fields) => { await updateUserProfile(uid, fields); setUsers(prev => prev.map(u => u.uid === uid ? { ...u, ...fields } : u)); }, []);
-  const handleRoleChange   = useCallback(async (uid, role)   => { await setUserRole(uid, role); setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u)); }, []);
-
-  if (sessionRestoring) return null;
-  if (!adminUser) return <LoginPage onLogin={handleLogin} busy={loginBusy} error={loginError} />;
-
-  const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
-  const total     = stations.length;
-  const available = stations.filter(s => s.status?.toLowerCase() === 'available').length;
-  const occupied  = stations.filter(s => s.status?.toLowerCase() === 'occupied').length;
-  const util      = total ? Math.round(occupied / total * 100) : 0;
-
-  const filteredBookings = bookings.filter(b =>
-    !bookSearch ||
-    b.stationName?.toLowerCase().includes(bookSearch.toLowerCase()) ||
-    b.txnId?.toLowerCase().includes(bookSearch.toLowerCase()) ||
-    b.uid?.toLowerCase().includes(bookSearch.toLowerCase()) ||
-    b.slot?.toLowerCase().includes(bookSearch.toLowerCase())
-  );
-
-  const TAB = (active) => ({
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '8px 16px', borderRadius: 8,
-    background: active ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.04)',
-    border: `1px solid ${active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.08)'}`,
-    color: active ? '#a78bfa' : 'rgba(255,255,255,0.4)',
-    fontSize: '0.8rem', fontWeight: active ? 700 : 500,
-    cursor: 'pointer', transition: 'all .15s', letterSpacing: '0.04em',
-  });
-
-  return (
-    <div className="adm-wrap">
-      <NeonBg />
-      <Navbar />
-      <main className="adm-body" style={{ paddingTop: 72 }}>
-        <div className="adm-hdr">
-          <div className="adm-hdr-l">
-            <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
-            <div>
-              <h1 className="adm-title">STATION CONTROL</h1>
-              <p className="adm-sub">Live Google Sheets sync · {adminUser.email}</p>
-            </div>
-          </div>
-          <div className="adm-hdr-r">
-            <button onClick={() => refetch()} className="adm-btn adm-btn-refresh"><RefreshCw size={14} /><span>Refresh</span></button>
-            <button onClick={handleLogout} className="adm-btn adm-btn-logout"><LogOut size={14} /><span>Logout</span></button>
-          </div>
-        </div>
-
-        <div className="adm-divider" aria-hidden="true">
-          <div className="adm-div-line" />
-          <span className="adm-div-txt">LIVE DATA</span>
-          <div className="adm-div-line" />
-        </div>
-
-        <div className="sc-grid">
-          <StatCard label="Total Stations" value={total}            Icon={Gamepad2}     glow="#a855f7" />
-          <StatCard label="Available"      value={available}        Icon={CheckCircle2} glow="#22c55e" />
-          <StatCard label="Occupied"       value={occupied}         Icon={Clock}        glow="#ef4444" />
-          <StatCard label="Bookings"       value={bookings.length}  Icon={BookOpen}     glow="#f59e0b" />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          <button style={TAB(activeTab === 'stations')} onClick={() => setActiveTab('stations')}>
-            <Gamepad2 size={14} /> Stations
-          </button>
-          <button style={TAB(activeTab === 'bookings')} onClick={() => setActiveTab('bookings')}>
-            <BookOpen size={14} /> Bookings {bookings.length > 0 && <span style={{ background:'rgba(245,158,11,0.2)', border:'1px solid rgba(245,158,11,0.35)', color:'#fbbf24', borderRadius:99, padding:'0px 6px', fontSize:'0.65rem', fontWeight:700 }}>{bookings.length}</span>}
-          </button>
-          <button style={TAB(activeTab === 'users')} onClick={() => setActiveTab('users')}>
-            <Users size={14} /> Users
-          </button>
-        </div>
-
-        {/* ─── STATIONS TAB ─── */}
-        {activeTab === 'stations' && (
-          <>
-            {isLoading && <div className="adm-skeletons">{[...Array(6)].map((_, i) => <div key={i} className="adm-skel" style={{ animationDelay: `${i * 70}ms` }} />)}</div>}
-            {isError   && <div className="adm-error"><AlertTriangle size={32} /><p>Failed to load station data</p><span>Check VITE_SHEETS_ID and VITE_SHEETS_API_KEY in your .env</span></div>}
-            {!isLoading && !isError && (
-              <div className="tbl-wrap">
-                <div className="tbl-neon tbl-neon-top" />
-                <div className="tbl-scroll">
-                  <table className="tbl">
-                    <thead>
-                      <tr className="tbl-head">
-                        {[
-                          '#',
-                          <span key="name" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Station Name <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
-                          <span key="type" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Type <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
-                          'Status', 'Active Slot', 'Booked Slots', 'Current Game',
-                          <span key="pref" style={{ display:'inline-flex', alignItems:'center', gap:4 }}>Preferred Game <Lock size={10} color="rgba(255,255,255,0.2)" /></span>,
-                          '',
-                        ].map((h, i) => <th key={i} className="tbl-th">{h}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sorted.map((s, i) => <StationRow key={`station-${s.id || i}`} station={s} />)}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="tbl-neon tbl-neon-bot" />
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ─── BOOKINGS TAB ─── */}
-        {activeTab === 'bookings' && (
-          <div>
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-              <input
-                value={bookSearch} onChange={e => setBookSearch(e.target.value)}
-                placeholder="Search by station, TXN ID, UID, slot…"
-                style={{ ...inputStyle, maxWidth: 320, flex:1 }}
-              />
-              <span style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.3)' }}>
-                {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-            {bookingsLoad ? (
-              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'24px 0', color:'rgba(255,255,255,0.4)' }}>
-                <Loader2 size={18} className="adm-spin" /> Loading bookings…
-              </div>
-            ) : filteredBookings.length === 0 ? (
-              <div style={{ padding:'24px 0', color:'rgba(255,255,255,0.3)', fontSize:'0.85rem' }}>
-                {bookSearch ? 'No bookings match your search.' : 'No bookings yet.'}
-              </div>
-            ) : (
-              filteredBookings.map(b => (
-                <BookingRow key={b.id} booking={b} onUpdate={updateBooking} onDelete={deleteBooking} />
-              ))
-            )}
-          </div>
-        )}
-
-        {/* ─── USERS TAB ─── */}
-        {activeTab === 'users' && (
-          <div>
-            {usersLoad ? (
-              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'24px 0', color:'rgba(255,255,255,0.4)' }}><Loader2 size={18} className="adm-spin" /> Loading users…</div>
-            ) : users.length === 0 ? (
-              <div style={{ padding:'24px 0', color:'rgba(255,255,255,0.3)', fontSize:'0.85rem' }}>No users found.</div>
-            ) : (
-              <div>
-                <p style={{ fontSize:'0.7rem', color:'rgba(255,255,255,0.3)', marginBottom:14 }}>{users.length} registered user{users.length !== 1 ? 's' : ''} · Click a row to expand and edit</p>
-                {users.map(u => <UserRow key={u.uid} user={u} onUpdate={handleUserUpdate} onRoleChange={handleRoleChange} />)}
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+  const handleL

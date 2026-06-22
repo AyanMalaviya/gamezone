@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import useStationData from '../hooks/useStationData';
-import useSlotScheduler from '../hooks/useSlotScheduler';
 import useAuthStore from '../store/authStore';
-import usePaymentStore from '../store/paymentStore';
 import StationCircle from '../components/StationCircle';
 import StationModal from '../components/StationModal';
 import Navbar from '../components/Navbar';
@@ -23,19 +21,8 @@ function SkeletonRow({ count }) {
 }
 
 export default function StationLayout() {
-  const { stations, isLoading, isError, refetch } = useStationData();
+  const { stations, isLoading, isError } = useStationData();
   const [selected, setSelected] = useState(null);
-
-  const oauthToken  = useAuthStore(s => s.oauthToken ?? null);
-  const setRefetch  = usePaymentStore(s => s.setRefetch);
-
-  // Inject refetch into paymentStore so it can trigger an immediate
-  // station re-poll right after a booking is confirmed.
-  useEffect(() => {
-    setRefetch(refetch);
-  }, [refetch, setRefetch]);
-
-  useSlotScheduler(stations, refetch, oauthToken);
 
   const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
   const rowTop    = sorted.filter(s => Number(s.id) >= 1 && Number(s.id) <= 7);
@@ -67,7 +54,6 @@ export default function StationLayout() {
         padding: '72px clamp(16px,3vw,32px) 56px',
       }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-
           <div style={{ textAlign: 'center', marginBottom: 'clamp(16px,3vw,32px)' }}>
             <p style={{
               color: 'rgba(255,255,255,0.35)',
@@ -168,7 +154,7 @@ export default function StationLayout() {
             textAlign:'center', marginTop:14,
             fontSize:'0.62rem', color:'rgba(255,255,255,0.16)', letterSpacing:'0.06em',
           }}>
-            Auto-refreshes every 30s · Availability syncs to IST time
+            Live · Updates instantly via Firestore
           </p>
         </div>
       </main>
