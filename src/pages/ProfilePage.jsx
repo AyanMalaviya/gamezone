@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   User, Phone, Mail, Lock, Save, Loader2, CheckCircle2,
@@ -156,7 +156,6 @@ function BookingsSection({ uid }) {
               alignItems: 'start',
               animation: 'prof-fadein .2s ease both',
             }}>
-              {/* Left: details */}
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                   <div style={{
@@ -170,7 +169,6 @@ function BookingsSection({ uid }) {
                     {b.stationName || `Station ${b.stationId}`}
                   </span>
                 </div>
-
                 {b.slot && (
                   <p style={{ margin: '0 0 3px', fontSize: '0.75rem', color: 'rgba(255,255,255,.4)' }}>
                     🕐 {b.slot}
@@ -188,8 +186,6 @@ function BookingsSection({ uid }) {
                   {fmtDate(b.bookedAt)}
                 </p>
               </div>
-
-              {/* Right: amount + status */}
               <div style={{ textAlign: 'right' }}>
                 <div style={{
                   fontFamily: "'Rajdhani','Inter',sans-serif",
@@ -214,9 +210,9 @@ function BookingsSection({ uid }) {
 /* ─── Profile Section ─── */
 function ProfileSection({ user, profile, onRefresh }) {
   const setPhone = useAuthStore(s => s.setPhone);
-  const [name, setName]     = useState(profile?.name  || user?.displayName || '');
-  const [phone, setPhone2]  = useState(profile?.phone || '');
-  const [busy, setBusy]     = useState(false);
+  const [name,   setName]   = useState(profile?.name  || user?.displayName || '');
+  const [phone,  setPhone2] = useState(profile?.phone || '');
+  const [busy,   setBusy]   = useState(false);
   const [status, setStatus] = useState(null);
 
   useEffect(() => {
@@ -232,15 +228,17 @@ function ProfileSection({ user, profile, onRefresh }) {
     }
     setBusy(true);
     try {
-      const ref = doc(db, 'users', user.uid);
+      const ref        = doc(db, 'users', user.uid);
       const normalized = phone.trim() ? normalizePhone(phone.trim()) : '';
       await updateDoc(ref, { name: name.trim(), phone: normalized, hasPhone: !!normalized });
-      if (name.trim() !== user.displayName) await updateProfile(auth.currentUser, { displayName: name.trim() });
+      if (name.trim() !== user.displayName)
+        await updateProfile(auth.currentUser, { displayName: name.trim() });
       setPhone(normalized || null);
       setStatus({ type: 'ok', msg: 'Profile updated successfully.' });
       onRefresh?.();
-    } catch { setStatus({ type: 'err', msg: 'Failed to save. Please try again.' }); }
-    finally { setBusy(false); }
+    } catch {
+      setStatus({ type: 'err', msg: 'Failed to save. Please try again.' });
+    } finally { setBusy(false); }
   };
 
   return (
@@ -257,8 +255,14 @@ function ProfileSection({ user, profile, onRefresh }) {
             style={{ ...inputStyle(true, false), opacity: .45, cursor: 'not-allowed' }} />
         </Field>
         <Field
-          label={<span>Phone Number {!profile?.phone && <span style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(239,68,68,.15)', color: '#fca5a5', borderRadius: 4, padding: '1px 6px' }}>Not added</span>}</span>}
-          icon={Phone} hint="Indian mobile (+91). Required to book a station.">
+          label={
+            <span>Phone Number {!profile?.phone &&
+              <span style={{ marginLeft: 6, fontSize: '0.65rem', background: 'rgba(239,68,68,.15)', color: '#fca5a5', borderRadius: 4, padding: '1px 6px' }}>Not added</span>}
+            </span>
+          }
+          icon={Phone}
+          hint="Indian mobile (+91). Required to book a station."
+        >
           <input type="tel" placeholder="+91 98765 43210" value={phone} onChange={e => setPhone2(e.target.value)}
             style={inputStyle(true, false)}
             onFocus={e => { e.target.style.borderColor = 'rgba(168,85,247,.55)'; e.target.style.boxShadow = '0 0 0 3px rgba(168,85,247,.12)'; }}
@@ -273,7 +277,9 @@ function ProfileSection({ user, profile, onRefresh }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           transition: 'opacity .2s', boxShadow: '0 4px 20px rgba(124,58,237,.35)',
         }}>
-          {busy ? <Loader2 size={16} style={{ animation: 'prof-spin .7s linear infinite' }} /> : <><Save size={15} /><span>Save Changes</span></>}
+          {busy
+            ? <Loader2 size={16} style={{ animation: 'prof-spin .7s linear infinite' }} />
+            : <><Save size={15} /><span>Save Changes</span></>}
         </button>
       </form>
     </SectionCard>
@@ -284,12 +290,12 @@ function ProfileSection({ user, profile, onRefresh }) {
 function PasswordSection({ user }) {
   const isGoogle = user?.providerData?.some(p => p.providerId === 'google.com');
   const [current, setCurrent] = useState('');
-  const [next, setNext]       = useState('');
+  const [next,    setNext]    = useState('');
   const [confirm, setConfirm] = useState('');
-  const [showC, setShowC]     = useState(false);
-  const [showN, setShowN]     = useState(false);
-  const [busy, setBusy]       = useState(false);
-  const [status, setStatus]   = useState(null);
+  const [showC,   setShowC]   = useState(false);
+  const [showN,   setShowN]   = useState(false);
+  const [busy,    setBusy]    = useState(false);
+  const [status,  setStatus]  = useState(null);
 
   if (isGoogle) return (
     <SectionCard title="Password" icon={Lock}>
@@ -307,8 +313,8 @@ function PasswordSection({ user }) {
 
   const handleChange = async (e) => {
     e.preventDefault(); setStatus(null);
-    if (next.length < 6) { setStatus({ type: 'err', msg: 'New password must be at least 6 characters.' }); return; }
-    if (next !== confirm) { setStatus({ type: 'err', msg: 'Passwords do not match.' }); return; }
+    if (next.length < 6)  { setStatus({ type: 'err', msg: 'New password must be at least 6 characters.' }); return; }
+    if (next !== confirm)  { setStatus({ type: 'err', msg: 'Passwords do not match.' }); return; }
     setBusy(true);
     try {
       const credential = EmailAuthProvider.credential(user.email, current);
@@ -367,7 +373,9 @@ function PasswordSection({ user }) {
           onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(124,58,237,.25)'; e.currentTarget.style.color = '#fff'; } }}
           onMouseLeave={e => { e.currentTarget.style.background = 'rgba(124,58,237,.15)'; e.currentTarget.style.color = '#c4b5fd'; }}
         >
-          {busy ? <Loader2 size={16} style={{ animation: 'prof-spin .7s linear infinite' }} /> : <><Lock size={15} /><span>Update Password</span></>}
+          {busy
+            ? <Loader2 size={16} style={{ animation: 'prof-spin .7s linear infinite' }} />
+            : <><Lock size={15} /><span>Update Password</span></>}
         </button>
       </form>
     </SectionCard>
@@ -376,32 +384,47 @@ function PasswordSection({ user }) {
 
 /* ─── Main Page ─── */
 export default function ProfilePage() {
-  const user     = useAuthStore(s => s.user);
-  const loading  = useAuthStore(s => s.loading);
+  const user    = useAuthStore(s => s.user);
+  const loading = useAuthStore(s => s.loading);
   const navigate = useNavigate();
 
-  const [profile, setProfile] = useState(null);
-  const [profLoading, setPL]  = useState(true);
+  const [profile,     setProfile] = useState(null);
+  const [profLoading, setPL]      = useState(false);  // start false — only true while fetching
 
+  // Redirect unauthenticated users
   useEffect(() => {
     if (!loading && !user) navigate('/auth/login', { replace: true });
   }, [user, loading, navigate]);
 
-  const loadProfile = async () => {
+  // Fetch Firestore profile whenever the Firebase user changes
+  // useCallback keeps the reference stable so the effect dep doesn’t churn
+  const loadProfile = useCallback(async () => {
     if (!user) return;
     setPL(true);
-    try { const p = await getUserProfile(user.uid); setProfile(p); }
-    finally { setPL(false); }
-  };
+    try {
+      const p = await getUserProfile(user.uid);
+      setProfile(p);
+    } catch (err) {
+      console.warn('[ProfilePage] profile fetch failed:', err.message);
+    } finally {
+      setPL(false);
+    }
+  }, [user?.uid]); // only re-create when the UID actually changes
 
-  useEffect(() => { loadProfile(); }, [user]); // eslint-disable-line
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
+  // Show global auth spinner while Firebase resolves, OR while fetching Firestore profile
   if (loading || profLoading) return (
     <div style={{ minHeight: '100dvh', background: '#0d0d0f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: 36, height: 36, borderRadius: '50%', border: '3px solid rgba(124,58,237,.2)', borderTopColor: '#7c3aed', animation: 'prof-spin .7s linear infinite' }} />
       <style>{`@keyframes prof-spin{to{transform:rotate(360deg)}} @keyframes prof-fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}`}</style>
     </div>
   );
+
+  // At this point loading=false and user=null means redirect already fired above
+  if (!user) return null;
 
   const avatar   = user?.photoURL;
   const initials = (profile?.name || user?.displayName || user?.email || '?')[0].toUpperCase();
@@ -481,7 +504,9 @@ export default function ProfilePage() {
             fontSize: '1.4rem', fontWeight: 800, color: '#fff',
             overflow: 'hidden', boxShadow: '0 0 20px rgba(124,58,237,.3)',
           }}>
-            {avatar ? <img src={avatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
+            {avatar
+              ? <img src={avatar} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : initials}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h1 style={{
