@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useStationData from '../hooks/useStationData';
 import useSlotScheduler from '../hooks/useSlotScheduler';
 import useAuthStore from '../store/authStore';
+import usePaymentStore from '../store/paymentStore';
 import StationCircle from '../components/StationCircle';
 import StationModal from '../components/StationModal';
 import Navbar from '../components/Navbar';
@@ -25,12 +26,15 @@ export default function StationLayout() {
   const { stations, isLoading, isError, refetch } = useStationData();
   const [selected, setSelected] = useState(null);
 
-  // Pull OAuth token from auth store — present only for signed-in Google users.
-  // Without it the scheduler runs in read-only mode (UI still correct via enrichStation).
-  const oauthToken = useAuthStore(s => s.oauthToken ?? null);
+  const oauthToken  = useAuthStore(s => s.oauthToken ?? null);
+  const setRefetch  = usePaymentStore(s => s.setRefetch);
 
-  // Automated availability: marks stations occupied/available based on IST time.
-  // Writes to Google Sheets when oauthToken is available, refetches otherwise.
+  // Inject refetch into paymentStore so it can trigger an immediate
+  // station re-poll right after a booking is confirmed.
+  useEffect(() => {
+    setRefetch(refetch);
+  }, [refetch, setRefetch]);
+
   useSlotScheduler(stations, refetch, oauthToken);
 
   const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
@@ -50,7 +54,6 @@ export default function StationLayout() {
     <div style={{ minHeight: '100dvh', background: '#0d0d0f', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
 
-      {/* Ambient glow */}
       <div aria-hidden style={{
         position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
         background: `
@@ -98,7 +101,6 @@ export default function StationLayout() {
             )}
           </div>
 
-          {/* Floor plan card */}
           <div style={{
             background: 'rgba(255,255,255,0.02)',
             border: '1px solid rgba(255,255,255,0.06)',

@@ -1,7 +1,12 @@
 /**
  * useSlotScheduler
  *
- * Runs every 60 seconds.
+ * Runs every 60 seconds (and immediately on mount).
+ * Also listens for the 'gz:slot-booked-active' CustomEvent fired by
+ * paymentStore when a booking is made for a currently-active slot —
+ * this triggers an extra immediate tick so the station flips to
+ * occupied right away instead of waiting up to 60s.
+ *
  * For each station it:
  *   1. Parses all booked slots in IST.
  *   2. Determines whether one is currently active (startMin <= nowIST < endMin).
@@ -89,7 +94,7 @@ export default function useSlotScheduler(stations, refetch, _oauthToken = null) 
       if (slotsDiffer || statusChanged || gameChanged || activeSlotChanged) {
         anyChange = true;
         try {
-          await gasUpdateStation(s.id, {   // ← s.id, not rowIndex
+          await gasUpdateStation(s.id, {
             status:      newStatus,
             activeSlot:  newActiveSlot,
             bookedSlots: cleaned,
@@ -107,6 +112,15 @@ export default function useSlotScheduler(stations, refetch, _oauthToken = null) 
   useEffect(() => {
     tick();
     const id = setInterval(tick, 60_000);
-    return () => clearInterval(id);
+
+    // Listen for immediate-tick events fired by paymentStore when a booking
+    // is made for a slot that is active right now.
+    const onSlotBooked = () => tick();
+    window.addEventListener('gz:slot-booked-active', onSlotBooked);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('gz:slot-booked-active', onSlotBooked);
+    };
   }, [tick]);
 }
