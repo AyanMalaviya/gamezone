@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock, Star,
+  LogOut, Save, Loader2, ShieldCheck, Gamepad2, Zap, Clock,
   RefreshCw, CheckCircle2, AlertTriangle, Users, Plus,
   Trash2, ChevronDown, ChevronUp, Shield, ShieldOff,
   BookOpen, Pencil, X as XIcon,
@@ -100,7 +100,7 @@ const inputStyle = {
   color: '#e2e8f0', fontSize: '0.83rem', outline: 'none', boxSizing: 'border-box',
 };
 
-// ── StationRow ────────────────────────────────────────────────────────────────────
+// ── StationRow ────────────────────────────────────────────────────────────────
 const StationRow = ({ station, onUpdate, onDelete }) => {
   const serSlot = (slot) => {
     if (!slot) return '';
@@ -149,10 +149,10 @@ const StationRow = ({ station, onUpdate, onDelete }) => {
     finally { setDeleting(false); }
   };
 
-  const occupied  = station.status === 'occupied';
-  const typeLabel = (form.type || station.stationType) === 'racing' ? '🏀️' : '🎮';
+  const occupied      = station.status === 'occupied';
+  const typeLabel     = (form.type || station.stationType) === 'racing' ? '🏎️' : '🎮';
   const activeSlotStr = serSlot(station.activeSlot);
-  const bookedStr = Array.isArray(station.bookedSlots)
+  const bookedStr     = Array.isArray(station.bookedSlots)
     ? station.bookedSlots.join(', ')
     : (station.bookedSlots || '');
 
@@ -164,14 +164,10 @@ const StationRow = ({ station, onUpdate, onDelete }) => {
           <i className={occupied ? 'dot dot-red' : 'dot dot-grn'} />
         </div>
       </td>
-
-      {/* Editable: Name */}
       <td className="td-i" style={{ minWidth: 150 }}>
         <input type="text" name="name" value={form.name} onChange={onChange}
           placeholder="Station Name" className="ni" style={{ width: '100%' }} />
       </td>
-
-      {/* Editable: Type */}
       <td className="td-i">
         <select name="type" value={form.type} onChange={onChange}
           className="sel" style={{ minWidth: 90 }}>
@@ -181,44 +177,32 @@ const StationRow = ({ station, onUpdate, onDelete }) => {
           <option value="vr">VR</option>
         </select>
       </td>
-
-      {/* Read-only derived: Status */}
       <td className="td-i">
         <span style={{
-          fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px',
-          borderRadius: 99,
+          fontSize: '0.75rem', fontWeight: 700, padding: '2px 8px', borderRadius: 99,
           background: occupied ? 'rgba(239,68,68,0.12)' : 'rgba(34,197,94,0.12)',
           border: `1px solid ${occupied ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}`,
           color: occupied ? '#f87171' : '#4ade80',
         }}>{occupied ? 'OCCUPIED' : 'AVAILABLE'}</span>
       </td>
-
-      {/* Read-only derived: Active Slot */}
       <td className="td-i">
         <span style={{ fontSize: '0.8rem', color: activeSlotStr ? '#fbbf24' : 'rgba(255,255,255,0.25)', fontWeight: 600 }}>
           {activeSlotStr || '—'}
         </span>
       </td>
-
-      {/* Read-only derived: Booked Slots */}
       <td className="td-i td-w">
         <span style={{ fontSize: '0.75rem', color: bookedStr ? '#a78bfa' : 'rgba(255,255,255,0.25)' }}>
           {bookedStr || '—'}
         </span>
       </td>
-
-      {/* Editable: Current Game */}
       <td className="td-i">
         <input type="text" name="currentGame" value={form.currentGame} onChange={onChange}
           placeholder="e.g. FC 25" className="ni" />
       </td>
-
-      {/* Editable: Preferred Game */}
       <td className="td-i">
         <input type="text" name="preferredGame" value={form.preferredGame} onChange={onChange}
           placeholder="e.g. GTA V" className="ni" />
       </td>
-
       <td className="td-sv">
         {err && <p style={{ fontSize: '0.65rem', color: '#f87171', marginBottom: 4, maxWidth: 180, wordBreak: 'break-word' }}>⚠ {err}</p>}
         <div style={{ display: 'flex', gap: 6 }}>
@@ -230,7 +214,8 @@ const StationRow = ({ station, onUpdate, onDelete }) => {
               : <Save size={13} />}
             <span>{saving ? 'Saving…' : saved ? 'Saved!' : err ? 'Error' : 'Save'}</span>
           </button>
-          <button onClick={handleDelete} disabled={deleting} title={confirmDel ? 'Click again to confirm' : 'Delete station'}
+          <button onClick={handleDelete} disabled={deleting}
+            title={confirmDel ? 'Click again to confirm' : 'Delete station'}
             style={{
               display: 'flex', alignItems: 'center', gap: 4,
               padding: '5px 10px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 600,
@@ -247,7 +232,7 @@ const StationRow = ({ station, onUpdate, onDelete }) => {
   );
 };
 
-// ── AddStationForm ─────────────────────────────────────────────────────────────
+// ── AddStationForm ────────────────────────────────────────────────────────────
 const AddStationForm = ({ onAdd }) => {
   const [open, setOpen]     = useState(false);
   const [saving, setSaving] = useState(false);
@@ -318,7 +303,7 @@ const AddStationForm = ({ onAdd }) => {
   );
 };
 
-// ── STATUS_COLORS / BookingRow / UserRow unchanged ───────────────────────────
+// ── BookingRow ────────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   confirmed: { color: '#4ade80', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.25)'  },
   cancelled: { color: '#f87171', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.25)'  },
@@ -326,11 +311,11 @@ const STATUS_COLORS = {
 };
 
 const BookingRow = ({ booking, onUpdate, onDelete }) => {
-  const [editing, setEditing]   = useState(false);
-  const [form, setForm]         = useState({ status: booking.status, slot: booking.slot, game: booking.game || '' });
-  const [saving, setSaving]     = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [confirmDel, setConfirm]= useState(false);
+  const [editing, setEditing]    = useState(false);
+  const [form, setForm]          = useState({ status: booking.status, slot: booking.slot, game: booking.game || '' });
+  const [saving, setSaving]      = useState(false);
+  const [deleting, setDeleting]  = useState(false);
+  const [confirmDel, setConfirm] = useState(false);
 
   const sc = STATUS_COLORS[form.status] ?? STATUS_COLORS.pending;
 
@@ -338,7 +323,7 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
     if (!ts) return '—';
     try {
       const d = ts.toDate ? ts.toDate() : new Date(ts);
-      return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+      return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
     } catch { return '—'; }
   };
 
@@ -358,7 +343,9 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
   return (
     <div style={{ borderRadius: 10, marginBottom: 8, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 99, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color, flexShrink: 0 }}>{(form.status || 'pending').toUpperCase()}</span>
+        <span style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', padding: '2px 8px', borderRadius: 99, background: sc.bg, border: `1px solid ${sc.border}`, color: sc.color, flexShrink: 0 }}>
+          {(form.status || 'pending').toUpperCase()}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{booking.stationName || '—'}</div>
           <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{booking.slot || '—'} · {booking.hours || 1}h · ₹{booking.amount}</div>
@@ -368,7 +355,9 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
           <div>{fmtDate(booking.bookedAt)}</div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => setEditing(e => !e)} style={{ width: 28, height: 28, borderRadius: 7, background: editing ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${editing ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.1)'}`, color: editing ? '#a78bfa' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{editing ? <XIcon size={12} /> : <Pencil size={12} />}</button>
+          <button onClick={() => setEditing(e => !e)} style={{ width: 28, height: 28, borderRadius: 7, background: editing ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.06)', border: `1px solid ${editing ? 'rgba(124,58,237,0.4)' : 'rgba(255,255,255,0.1)'}`, color: editing ? '#a78bfa' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            {editing ? <XIcon size={12} /> : <Pencil size={12} />}
+          </button>
           <button onClick={handleDelete} disabled={deleting} style={{ width: 28, height: 28, borderRadius: 7, background: confirmDel ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.08)', border: `1px solid ${confirmDel ? 'rgba(239,68,68,0.6)' : 'rgba(239,68,68,0.2)'}`, color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .15s' }}>
             {deleting ? <Loader2 size={12} className="adm-spin" /> : <Trash2 size={12} />}
           </button>
@@ -408,11 +397,12 @@ const BookingRow = ({ booking, onUpdate, onDelete }) => {
   );
 };
 
+// ── UserRow ───────────────────────────────────────────────────────────────────
 const UserRow = ({ user, onUpdate, onRoleChange }) => {
   const [expanded, setExpanded] = useState(false);
   const isAdmin = user.role === 'admin';
   const [core, setCore] = useState({ name: user.name || '', email: user.email || '', phone: user.phone || '' });
-  const SYSTEM_KEYS  = new Set(['uid','name','email','phone','role','createdAt','hasPhone']);
+  const SYSTEM_KEYS  = new Set(['uid', 'name', 'email', 'phone', 'role', 'createdAt', 'hasPhone']);
   const extraInitial = Object.entries(user).filter(([k]) => !SYSTEM_KEYS.has(k)).map(([k, v]) => ({ key: k, value: String(v ?? '') }));
   const [extras, setExtras]      = useState(extraInitial);
   const [saving, setSaving]      = useState(false);
@@ -466,7 +456,7 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
         <div style={{ padding: '0 16px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <p style={{ fontSize: '0.6rem', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.25)', textTransform: 'uppercase', margin: '14px 0 8px' }}>Core Info</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
-            {[['name','Name'],['email','Email'],['phone','Phone']].map(([key, label]) => (
+            {[['name', 'Name'], ['email', 'Email'], ['phone', 'Phone']].map(([key, label]) => (
               <div key={key}>
                 <label style={{ display: 'block', fontSize: '0.62rem', color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', marginBottom: 5 }}>{label.toUpperCase()}</label>
                 <input type="text" value={core[key]} onChange={e => setCore(p => ({ ...p, [key]: e.target.value }))} style={inputStyle} />
@@ -512,7 +502,7 @@ const UserRow = ({ user, onUpdate, onRoleChange }) => {
   );
 };
 
-// ── AdminDashboard ─────────────────────────────────────────────────────────────
+// ── AdminDashboard ────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const [adminUser,  setAdminUser]  = useState(null);
   const [loginBusy,  setLoginBusy]  = useState(false);
@@ -520,8 +510,8 @@ export default function AdminDashboard() {
   const [sessionRestoring, setRestoring] = useState(true);
   const [activeTab, setActiveTab]   = useState('stations');
 
-  const [users,     setUsers]     = useState([]);
-  const [usersLoad, setUsersLoad] = useState(false);
+  const [users,      setUsers]     = useState([]);
+  const [usersLoad,  setUsersLoad] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
 
   const { stations, isLoading, isError } = useStationData();
@@ -553,7 +543,10 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (activeTab !== 'users' || !adminUser) return;
     setUsersLoad(true);
-    listAllUsers().then(setUsers).catch(err => console.warn('[AdminDashboard] users load failed:', err.message)).finally(() => setUsersLoad(false));
+    listAllUsers()
+      .then(setUsers)
+      .catch(err => console.warn('[AdminDashboard] users load failed:', err.message))
+      .finally(() => setUsersLoad(false));
   }, [activeTab, adminUser]);
 
   const handleLogout = async () => {
@@ -563,4 +556,190 @@ export default function AdminDashboard() {
     navigate('/', { replace: true });
   };
 
-  const handleL
+  const handleLogin = async () => {
+    setLoginBusy(true); setLoginError(null);
+    try {
+      const result  = await signInWithPopup(auth, adminGoogleProvider);
+      const userObj = { uid: result.user.uid, email: result.user.email, displayName: result.user.displayName, photoURL: result.user.photoURL };
+      sessionStorage.setItem(SESSION_USER_KEY, JSON.stringify(userObj));
+      setAdminUser(userObj);
+    } catch (e) {
+      setLoginError(e.message || 'Sign-in failed. Try again.');
+    } finally { setLoginBusy(false); }
+  };
+
+  const handleUserUpdate = useCallback(async (uid, fields) => {
+    await updateUserProfile(uid, fields);
+    setUsers(prev => prev.map(u => u.uid === uid ? { ...u, ...fields } : u));
+  }, []);
+
+  const handleRoleChange = useCallback(async (uid, role) => {
+    await setUserRole(uid, role);
+    setUsers(prev => prev.map(u => u.uid === uid ? { ...u, role } : u));
+  }, []);
+
+  if (sessionRestoring) return null;
+  if (!adminUser) return <LoginPage onLogin={handleLogin} busy={loginBusy} error={loginError} />;
+
+  const sorted    = [...stations].sort((a, b) => Number(a.id) - Number(b.id));
+  const total     = stations.length;
+  const available = stations.filter(s => s.status?.toLowerCase() === 'available').length;
+  const occupied  = stations.filter(s => s.status?.toLowerCase() === 'occupied').length;
+  const util      = total ? Math.round(occupied / total * 100) : 0;
+
+  const filteredBookings = bookings.filter(b =>
+    !bookSearch ||
+    b.stationName?.toLowerCase().includes(bookSearch.toLowerCase()) ||
+    b.txnId?.toLowerCase().includes(bookSearch.toLowerCase()) ||
+    b.uid?.toLowerCase().includes(bookSearch.toLowerCase()) ||
+    b.slot?.toLowerCase().includes(bookSearch.toLowerCase())
+  );
+
+  const TAB = (active) => ({
+    display: 'flex', alignItems: 'center', gap: 6,
+    padding: '8px 16px', borderRadius: 8,
+    background: active ? 'rgba(124,58,237,0.2)' : 'rgba(255,255,255,0.04)',
+    border: `1px solid ${active ? 'rgba(124,58,237,0.45)' : 'rgba(255,255,255,0.08)'}`,
+    color: active ? '#a78bfa' : 'rgba(255,255,255,0.4)',
+    fontSize: '0.8rem', fontWeight: active ? 700 : 500,
+    cursor: 'pointer', transition: 'all .15s', letterSpacing: '0.04em',
+  });
+
+  return (
+    <div className="adm-wrap">
+      <NeonBg />
+      <Navbar />
+      <main className="adm-body" style={{ paddingTop: 72 }}>
+        <div className="adm-hdr">
+          <div className="adm-hdr-l">
+            <div className="adm-title-icon" ref={zapRef}><Zap size={22} /></div>
+            <div>
+              <h1 className="adm-title">STATION CONTROL</h1>
+              <p className="adm-sub">Firestore live · {adminUser.email}</p>
+            </div>
+          </div>
+          <div className="adm-hdr-r">
+            <button onClick={handleLogout} className="adm-btn adm-btn-logout"><LogOut size={14} /><span>Logout</span></button>
+          </div>
+        </div>
+
+        <div className="adm-divider" aria-hidden="true">
+          <div className="adm-div-line" />
+          <span className="adm-div-txt">LIVE DATA</span>
+          <div className="adm-div-line" />
+        </div>
+
+        <div className="sc-grid">
+          <StatCard label="Total Stations" value={total}           Icon={Gamepad2}     glow="#a855f7" />
+          <StatCard label="Available"      value={available}       Icon={CheckCircle2} glow="#22c55e" />
+          <StatCard label="Occupied"       value={occupied}        Icon={Clock}        glow="#ef4444" />
+          <StatCard label="Bookings"       value={bookings.length} Icon={BookOpen}     glow="#f59e0b" />
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          <button style={TAB(activeTab === 'stations')} onClick={() => setActiveTab('stations')}>
+            <Gamepad2 size={14} /> Stations
+          </button>
+          <button style={TAB(activeTab === 'bookings')} onClick={() => setActiveTab('bookings')}>
+            <BookOpen size={14} /> Bookings
+            {bookings.length > 0 && (
+              <span style={{ background: 'rgba(245,158,11,0.2)', border: '1px solid rgba(245,158,11,0.35)', color: '#fbbf24', borderRadius: 99, padding: '0px 6px', fontSize: '0.65rem', fontWeight: 700 }}>{bookings.length}</span>
+            )}
+          </button>
+          <button style={TAB(activeTab === 'users')} onClick={() => setActiveTab('users')}>
+            <Users size={14} /> Users
+          </button>
+        </div>
+
+        {/* ── STATIONS TAB ── */}
+        {activeTab === 'stations' && (
+          <>
+            {isLoading && <div className="adm-skeletons">{[...Array(6)].map((_, i) => <div key={i} className="adm-skel" style={{ animationDelay: `${i * 70}ms` }} />)}</div>}
+            {isError   && <div className="adm-error"><AlertTriangle size={32} /><p>Failed to load station data</p></div>}
+            {!isLoading && !isError && (
+              <>
+                <AddStationForm onAdd={addStation} />
+                <div className="tbl-wrap">
+                  <div className="tbl-neon tbl-neon-top" />
+                  <div className="tbl-scroll">
+                    <table className="tbl">
+                      <thead>
+                        <tr className="tbl-head">
+                          {['#', 'Station Name', 'Type', 'Status', 'Active Slot', 'Booked Slots', 'Current Game', 'Preferred Game', ''].map((h, i) => (
+                            <th key={i} className="tbl-th">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sorted.map((s, i) => (
+                          <StationRow
+                            key={`station-${s.id || i}`}
+                            station={s}
+                            onUpdate={updateStation}
+                            onDelete={deleteStation}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="tbl-neon tbl-neon-bot" />
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── BOOKINGS TAB ── */}
+        {activeTab === 'bookings' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+              <input
+                value={bookSearch} onChange={e => setBookSearch(e.target.value)}
+                placeholder="Search by station, TXN ID, UID, slot…"
+                style={{ ...inputStyle, maxWidth: 320, flex: 1 }}
+              />
+              <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)' }}>
+                {filteredBookings.length} booking{filteredBookings.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {bookingsLoad ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '24px 0', color: 'rgba(255,255,255,0.4)' }}>
+                <Loader2 size={18} className="adm-spin" /> Loading bookings…
+              </div>
+            ) : filteredBookings.length === 0 ? (
+              <div style={{ padding: '24px 0', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>
+                {bookSearch ? 'No bookings match your search.' : 'No bookings yet.'}
+              </div>
+            ) : (
+              filteredBookings.map(b => (
+                <BookingRow key={b.id} booking={b} onUpdate={updateBooking} onDelete={deleteBooking} />
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── USERS TAB ── */}
+        {activeTab === 'users' && (
+          <div>
+            {usersLoad ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '24px 0', color: 'rgba(255,255,255,0.4)' }}>
+                <Loader2 size={18} className="adm-spin" /> Loading users…
+              </div>
+            ) : users.length === 0 ? (
+              <div style={{ padding: '24px 0', color: 'rgba(255,255,255,0.3)', fontSize: '0.85rem' }}>No users found.</div>
+            ) : (
+              <div>
+                <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.3)', marginBottom: 14 }}>
+                  {users.length} registered user{users.length !== 1 ? 's' : ''} · Click a row to expand and edit
+                </p>
+                {users.map(u => (
+                  <UserRow key={u.uid} user={u} onUpdate={handleUserUpdate} onRoleChange={handleRoleChange} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
