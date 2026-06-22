@@ -1,24 +1,18 @@
 /**
  * gasClient.js — Thin client for the Google Apps Script Web App.
  *
- * All Sheets WRITES go through this. No OAuth token needed.
- * The GAS Web App runs as the sheet owner and has permanent access.
+ * Handles ONLY:
+ *   1. Bookings sheet  — append new booking row
+ *   2. Station sheet   — update booked slots / station status
+ *
+ * Users sheet sync has been REMOVED. Users are stored exclusively in
+ * Firestore (/users/{uid}) and read directly from there.
  *
  * Set VITE_GAS_ENDPOINT in .env to your deployed /exec URL.
- * e.g. VITE_GAS_ENDPOINT=https://script.google.com/macros/s/AKfy.../exec
  *
  * WHY GET instead of POST:
- *   GAS Web Apps redirect every POST to a new URL, which fetch() follows
- *   in no-cors mode — the redirect drops the body, so the server never
- *   receives the payload. GET requests with query-string params are NOT
- *   redirected and work reliably across origins without CORS preflight.
- *
- * WHY stationId instead of rowIndex:
- *   rowIndex is 0-based from the JS array. The sheet has 2 header rows,
- *   so rowIndex 0 → sheet row 3, rowIndex 6 → sheet row 9, etc.
- *   Passing an offset is fragile — any header-row change breaks it.
- *   Instead we send `stationId` (column A value) and let the GAS script
- *   find the correct row with a column-A lookup. This is offset-proof.
+ *   GAS Web Apps redirect every POST, which fetch() follows in no-cors mode
+ *   dropping the body. GET with query-string params are not redirected.
  */
 
 const GAS_URL = import.meta.env.VITE_GAS_ENDPOINT;
@@ -53,52 +47,22 @@ export function gasAddBookedSlot({ stationId, stationName, slot }) {
 /**
  * Remove a single slot from the station's Booked Slots column.
  * Called when a booking is deleted from the admin dashboard.
- * GAS finds the station row by stationId and splices the slot out
- * of the comma-separated Booked Slots cell.
- *
- * @param {string|number} stationId — column A value (e.g. "7")
- * @param {string}        slot      — exact slot string to remove (e.g. "14:00-15:00")
  */
 export function gasRemoveBookedSlot({ stationId, slot }) {
   return gasGet({ action: 'removeBookedSlot', stationId, slot });
 }
 
-/** Append a new user row to the Users sheet. */
-export function gasAddUser({ uid, name, email, phone, role }) {
-  return gasGet({ action: 'addUser', uid, name, email, phone, role });
-}
-
-/** Alias used by useUserProfile.js */
-export const appendUserToSheet = ({ uid, name, email, phone, role }, _oauthToken) =>
-  gasAddUser({ uid, name, email, phone, role });
-
-/** Update the phone number for an existing user row in the Users sheet. */
-export function updateUserPhoneInSheet(uid, phone, _oauthToken) {
-  return gasGet({ action: 'updateUserPhone', uid, phone });
-}
-
 /**
- * Update only the mutable columns (D, E, F, G) of a station row.
- * GAS finds the row by matching stationId in column A — no offset math needed.
- *
- * Locked columns A (ID), B (Name), C (Type), H (Preferred Game) are NOT sent
- * so the GAS script must NOT overwrite them.
- *
- * @param {string|number} stationId   — value in column A (e.g. "7")
- * @param {object}        data
- * @param {string}        data.status        — "available" | "occupied"
- * @param {string}        data.activeSlot    — "HH:MM-HH:MM" or ""
- * @param {string[]}      data.bookedSlots   — array of slot strings
- * @param {string}        data.currentGame   — game name or ""
+ * Update only the mutable columns of a station row.
+ * GAS finds the row by matching stationId in column A.
  */
 export function gasUpdateStation(stationId, data) {
   return gasGet({
     action:      'updateStation',
-    stationId,                          // GAS looks up the row by this
+    stationId,
     status:      data.status,
     activeSlot:  data.activeSlot ?? '',
-    bookedSlots: data.bookedSlots,      // array → comma-joined by gasGet
+    bookedSlots: data.bookedSlots,
     currentGame: data.currentGame,
-    // stationName, stationType, preferredGame intentionally omitted — locked
   });
 }

@@ -1,6 +1,5 @@
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { appendUserToSheet, updateUserPhoneInSheet } from '../lib/gasClient';
 
 /**
  * Get a user's Firestore profile doc.
@@ -25,9 +24,7 @@ export async function createUserProfile(uid, data, role = 'member') {
     role,
     createdAt: new Date(),
   });
-
-  // Mirror to Google Sheets Users tab — fire-and-forget
-  appendUserToSheet({ uid, name: data.name || '', email: data.email || '', phone: data.phone || '', role });
+  // Users sheet sync removed — Firestore is the single source of truth for users.
 }
 
 /**
@@ -36,7 +33,7 @@ export async function createUserProfile(uid, data, role = 'member') {
 export async function savePhoneNumber(uid, phone) {
   const ref = doc(db, 'users', uid);
   await updateDoc(ref, { phone, hasPhone: true });
-  updateUserPhoneInSheet(uid, phone);
+  // Sheet sync removed — phone is stored in Firestore only.
 }
 
 /**

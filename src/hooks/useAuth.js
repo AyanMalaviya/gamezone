@@ -10,7 +10,6 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, adminGoogleProvider } from '../lib/firebase';
 import { createUserProfile, getUserProfile, savePhoneNumber } from './useUserProfile';
-import { gasAddUser } from '../lib/gasClient';
 import useAuthStore from '../store/authStore';
 
 // ─── Email login ──────────────────────────────────────────────────────────────
@@ -35,16 +34,8 @@ export async function registerWithEmail(email, password, phoneOrName) {
     phone: isPhone ? phoneOrName : '',
   };
 
-  // role = 'member' (default)
+  // Write to Firestore only — Users sheet removed
   await createUserProfile(cred.user.uid, profile, 'member');
-
-  gasAddUser({
-    uid:   cred.user.uid,
-    email: profile.email,
-    name:  profile.name,
-    phone: profile.phone,
-    role:  'member',
-  });
 
   await sendEmailVerification(cred.user);
   await signOut(auth);
@@ -62,16 +53,8 @@ export async function loginWithGoogle() {
       name:  result.user.displayName || '',
       phone: '',
     };
-    // role = 'member' (default)
+    // Write to Firestore only — Users sheet removed
     await createUserProfile(result.user.uid, profile, 'member');
-
-    gasAddUser({
-      uid:   result.user.uid,
-      email: profile.email,
-      name:  profile.name,
-      phone: '',
-      role:  'member',
-    });
   }
   return result;
 }
@@ -87,23 +70,14 @@ export async function loginWithGoogleAdmin() {
   const existing = await getUserProfile(result.user.uid);
 
   if (!existing) {
-    // Brand-new user logging in via admin panel → create as admin
     const profile = {
       email: result.user.email,
       name:  result.user.displayName || '',
       phone: '',
     };
+    // Write to Firestore only — Users sheet removed
     await createUserProfile(result.user.uid, profile, 'admin');
-
-    gasAddUser({
-      uid:   result.user.uid,
-      email: profile.email,
-      name:  profile.name,
-      phone: '',
-      role:  'admin',
-    });
   } else if (existing.role !== 'admin') {
-    // Existing member using admin panel → promote to admin
     const { updateUserProfile } = await import('./useUsers');
     await updateUserProfile(result.user.uid, { role: 'admin' });
   }
